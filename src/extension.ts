@@ -34,7 +34,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			logger
 		);
 
-		// Register the sidebar view
+		// Register the sidebar view5
 		context.subscriptions.push(
 			vscode.window.registerWebviewViewProvider(VIEW_ID_MAIN, viewProvider)
 		);

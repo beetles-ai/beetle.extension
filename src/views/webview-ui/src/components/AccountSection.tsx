@@ -7,6 +7,7 @@ interface AccountSectionProps {
 
 export default function AccountSection({ user }: AccountSectionProps) {
   const vscode = useVSCode();
+  console.log(user, "here is teh user");
 
   const handleLogout = () => {
     vscode.postMessage({ type: 'logout' });

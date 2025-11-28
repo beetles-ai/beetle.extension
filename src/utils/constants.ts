@@ -1,6 +1,7 @@
 // Constants for Beetle extension
 
-export const BEETLE_API_BASE_URL = 'https://beetleai.dev/api';
+// export const BEETLE_API_BASE_URL = 'https://beetleai.dev/api';
+export const BEETLE_API_BASE_URL = 'http://localhost:3001/api';
 export const BEETLE_SIGNIN_URL = 'http://localhost:3000/sign-in?source=extension';
 export const BEETLE_URI_SCHEME = 'vscode';
 export const BEETLE_URI_AUTHORITY = 'beetle.beetle';

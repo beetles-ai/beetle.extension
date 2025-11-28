@@ -17,8 +17,8 @@ export class BeetleService {
   public async getUserInfo(): Promise<User | null> {
     try {
       this.logger.info('Fetching user info');
-      const user = await this.apiClient.get<User>('/user');
-      return user;
+      const user = await this.apiClient.get<any>('/user');
+      return user.user;
     } catch (error) {
       this.logger.error('Failed to fetch user info', error);
       return null;
