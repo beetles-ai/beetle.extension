@@ -28,6 +28,10 @@ export interface ReviewFile {
   status: 'added' | 'modified' | 'deleted';
   additions: number;
   deletions: number;
+  patch?: string; // Full diff patch
+  contentHash?: string; // Hash to detect changes
+  isIncremental?: boolean; // File has new changes since last review
+  previouslyReviewed?: boolean; // File was reviewed before
 }
 
 export interface AuthToken {
@@ -41,7 +45,7 @@ export type WebviewMessage =
   | { type: 'logout' }
   | { type: 'selectRepository'; repoId: string }
   | { type: 'selectBranch'; branchName: string }
-  | { type: 'triggerReview' }
+  | { type: 'triggerReview'; filePaths?: string[] } // Optional: specific files to review
   | { type: 'openSettings' }
   | { type: 'openUpgrade' }
   | { type: 'openFile'; file: ReviewFile }
@@ -51,6 +55,7 @@ export type WebviewMessage =
   | { type: 'copyToClipboard'; text: string }
   | { type: 'showWarning'; message: string }
   | { type: 'clearSession' }
+  | { type: 'deleteSession'; sessionId: string }
   | { type: 'ready' };
 
 export type ExtensionMessage =
@@ -61,7 +66,7 @@ export type ExtensionMessage =
   | { type: 'reviewFilesData'; files: ReviewFile[]; count: number }
   | { type: 'error'; message: string }
   | { type: 'log'; message: string }
-  | { type: 'reviewSessionUpdated'; session: ReviewSession }
+  | { type: 'reviewSessionsUpdated'; sessions: ReviewSession[]; currentSessionId: string | null }
   | { type: 'changesStateUpdate'; hasChanges: boolean };
 
 // Enhanced UI Types
@@ -83,6 +88,10 @@ export interface FileCommentGroup {
   highCount: number;
   issueCount: number; // Critical + High
   expanded: boolean;
+  // Progressive review tracking
+  lastReviewedHash?: string; // Hash of file content when last reviewed
+  lastReviewedPatch?: string; // Patch that was reviewed
+  reviewedAt?: Date; // When this was reviewed
 }
 
 export interface ReviewSession {

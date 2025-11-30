@@ -80,6 +80,23 @@ export async function activate(context: vscode.ExtensionContext) {
 		});
 
 		logger.info('Beetle extension activated successfully');
+
+		// Show login notification if not authenticated (non-blocking)
+		// This runs independently so it doesn't block extension activation
+		(async () => {
+			const isAuthenticated = await authProvider.isAuthenticated();
+			if (!isAuthenticated) {
+				const loginAction = 'Login';
+				const result = await vscode.window.showInformationMessage(
+					'Log in to Beetle AI to get started!',
+					loginAction
+				);
+				
+				if (result === loginAction) {
+					await authProvider.login();
+				}
+			}
+		})();
 	} catch (error) {
 		logger.error('Failed to activate Beetle extension', error);
 		vscode.window.showErrorMessage('Failed to activate Beetle extension');
