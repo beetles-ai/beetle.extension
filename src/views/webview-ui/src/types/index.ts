@@ -42,6 +42,10 @@ export type WebviewMessage =
   | { type: 'openFile'; file: ReviewFile }
   | { type: 'navigateToComment'; filePath: string; line: number }
   | { type: 'toggleFile'; filePath: string }
+  | { type: 'markCommentResolved'; commentId: string; filePath: string; lineStart: number }
+  | { type: 'copyToClipboard'; text: string }
+  | { type: 'showWarning'; message: string }
+  | { type: 'clearSession' }
   | { type: 'ready' };
 
 // Extension → Webview messages
@@ -63,9 +67,11 @@ export interface CommentData {
   line_start: number;
   line_end: number;
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
+  title: string;
   confidence: string;
   content: string;
   created_at: Date;
+  resolved?: boolean;
 }
 
 export interface FileCommentGroup {

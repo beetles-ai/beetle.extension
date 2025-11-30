@@ -37,8 +37,32 @@
       {
         "command": "beetle.test",
         "title": "Beetle: Test Extension"
+      },
+      {
+        "command": "beetle.markCommentResolved",
+        "title": "Mark Resolved",
+        "icon": "$(check)"
+      },
+      {
+        "command": "beetle.fixWithAI",
+        "title": "Fix with AI",
+        "icon": "$(sparkle)"
       }
-    ]
+    ],
+    "menus": {
+      "comments/commentThread/title": [
+        {
+          "command": "beetle.markCommentResolved",
+          "group": "inline",
+          "when": "commentController == beetle-review"
+        },
+        {
+          "command": "beetle.fixWithAI",
+          "group": "inline",
+          "when": "commentController == beetle-review"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",

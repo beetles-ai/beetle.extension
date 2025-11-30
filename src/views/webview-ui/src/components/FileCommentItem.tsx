@@ -51,7 +51,7 @@ export default function FileCommentItem({
     <div className="mb-2">
       {/* File Header */}
       <div
-        className="flex items-center justify-between py-1.5 px-2 hover:bg-vscode-list-hover rounded cursor-pointer transition-colors"
+        className="flex items-center justify-between py-1 px-2 hover:bg-vscode-list-hover rounded cursor-pointer transition-colors"
         onClick={onToggle}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -64,7 +64,7 @@ export default function FileCommentItem({
         {badge.element ? (
           <div className="ml-2 flex-shrink-0">{badge.element}</div>
         ) : (
-          <span className={`text-xs font-bold ${badge.color} ml-2 flex-shrink-0`}>
+          <span className={`text-xs ${badge.color} ml-2 flex-shrink-0`}>
             {badge.text}
           </span>
         )}
@@ -72,7 +72,7 @@ export default function FileCommentItem({
       
       {/* Comments List or "No comments yet" message */}
       {file.expanded && (
-        <div className="ml-6  pl-3 mt-1">
+        <div className="ml-6 pl-3">
           {file.comments.length === 0 ? (
             <div className="text-xs opacity-50 py-2 italic">
               {isActiveReview ? 'Analyzing... no comments yet' : 'No comments'}
