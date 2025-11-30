@@ -51,7 +51,7 @@ export default function DashboardView() {
 
           // Auto-stop reviewInProgress if current session is complete
           const currentSession = message.sessions.find(s => s.dataId === message.currentSessionId);
-          if (currentSession && (currentSession.status === 'completed' || currentSession.status === 'failed')) {
+          if (currentSession && (currentSession.status === 'completed' || currentSession.status === 'failed' || currentSession.status === 'interrupted')) {
             setReviewInProgress(false);
           }
           break;
@@ -124,9 +124,21 @@ export default function DashboardView() {
   };
 
   const handleStopReview = () => {
+    if (!currentSessionId) {
+      console.warn('No current session to stop');
+      return;
+    }
+
+    // Immediately update UI for better feedback
     setReviewInProgress(false);
-    // Clear current session (moves to previous)
-    setCurrentSessionId(null);
+
+    // Notify the extension to stop the review (backend API call)
+    vscode.postMessage({ 
+      type: 'stopReview',
+      sessionId: currentSessionId
+    });
+    
+    // UI will be further updated via the reviewSessionsUpdated message from extension
   };
 
   // Progressive review: Detect incremental changes across ALL sessions

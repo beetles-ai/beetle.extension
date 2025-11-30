@@ -56,6 +56,7 @@ export type WebviewMessage =
   | { type: 'showWarning'; message: string }
   | { type: 'clearSession' }
   | { type: 'deleteSession'; sessionId: string }
+  | { type: 'stopReview'; sessionId: string }
   | { type: 'ready' };
 
 export type ExtensionMessage =
@@ -101,7 +102,7 @@ export interface ReviewSession {
     from: string;
     to: string;
   };
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted';
   totalComments: number;
   resolvedComments: number;
   files: FileCommentGroup[];

@@ -223,6 +223,11 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         this.handleDeleteSession(sessionId);
         break;
 
+      case 'stopReview':
+        const stopSessionId = 'sessionId' in message ? message.sessionId : '';
+        this.handleStopReview(stopSessionId);
+        break;
+
       default:
         this.logger.warn('Unknown message type', message);
     }
@@ -329,6 +334,66 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       this.logger.error('Error deleting session', error);
       vscode.window.showErrorMessage('Failed to delete session');
+    }
+  }
+  
+  /**
+   * Handle stop review - interrupt ongoing analysis
+   */
+  private async handleStopReview(sessionId: string): Promise<void> {
+    this.logger.info(`Stopping review: ${sessionId}`);
+    
+    try {
+      // Find the session
+      const session = this.sessions.find(s => s.dataId === sessionId);
+      if (!session) {
+        this.logger.warn(`Session not found: ${sessionId}`);
+        return;
+      }
+
+      // Only allow stopping if currently running
+      if (session.status !== 'running') {
+        vscode.window.showInformationMessage('Analysis is not running');
+        return;
+      }
+
+      // Call API to stop the analysis
+      const result = await this.beetleService.stopReview(sessionId);
+      
+      if (!result) {
+        vscode.window.showErrorMessage('Failed to stop analysis');
+        return;
+      }
+
+      this.logger.info(`✅ Analysis stopped: ${sessionId}`, result);
+
+      // Update session status
+      session.status = 'interrupted';
+
+      // Stop polling
+      this.beetleService.stopCommentPolling(sessionId);
+
+      // If this is the current session, clear it
+      if (this.currentSession?.dataId === sessionId) {
+        this.currentSession = null;
+        this.currentReviewId = null;
+      }
+
+      // Persist changes
+      this.saveCachedSessions();
+
+      // Notify UI
+      this.sendMessage({
+        type: 'reviewSessionsUpdated',
+        sessions: this.sessions,
+        currentSessionId: this.currentSession?.dataId || null
+      });
+
+      vscode.window.showInformationMessage('✓ Review stopped');
+      
+    } catch (error) {
+      this.logger.error('Error stopping review', error);
+      vscode.window.showErrorMessage('Failed to stop review');
     }
   }
   
