@@ -46,6 +46,20 @@ export async function activate(context: vscode.ExtensionContext) {
 			})
 		);
 		
+		// Register mark comment resolved command
+		context.subscriptions.push(
+			vscode.commands.registerCommand('beetle.markCommentResolved', (thread: vscode.CommentThread) => {
+				viewProvider.handleMarkResolved(thread);
+			})
+		);
+		
+		// Register fix with AI command
+		context.subscriptions.push(
+			vscode.commands.registerCommand('beetle.fixWithAI', (thread: vscode.CommentThread) => {
+				viewProvider.handleFixWithAI(thread);
+			})
+		);
+		
 		// Register URI handler for OAuth callback
 		context.subscriptions.push(
 			vscode.window.registerUriHandler({

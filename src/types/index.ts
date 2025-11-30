@@ -47,6 +47,10 @@ export type WebviewMessage =
   | { type: 'openFile'; file: ReviewFile }
   | { type: 'navigateToComment'; filePath: string; line: number }
   | { type: 'toggleFile'; sessionId: string; filePath: string }
+  | { type: 'markCommentResolved'; commentId: string; filePath: string; lineStart: number }
+  | { type: 'copyToClipboard'; text: string }
+  | { type: 'showWarning'; message: string }
+  | { type: 'clearSession' }
   | { type: 'ready' };
 
 export type ExtensionMessage =

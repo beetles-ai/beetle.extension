@@ -192,6 +192,20 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
           this.handleToggleFile(message.filePath);
         }
         break;
+  
+      case 'markCommentResolved':
+        this.handleMarkResolvedFromWebview(message.commentId, message.filePath, message.lineStart);
+        break;
+      case 'copyToClipboard':
+        vscode.env.clipboard.writeText(message.text);
+        vscode.window.showInformationMessage('✨ AI prompt copied to clipboard!');
+        break;
+      case 'showWarning':
+        vscode.window.showWarningMessage(message.message);
+        break;
+      case 'clearSession':
+        this.handleClearSession();
+        break;
 
       default:
         this.logger.warn('Unknown message type', message);
@@ -214,6 +228,42 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         type: 'error',
         message: 'Failed to load user data'
       });
+    }
+  }
+
+  /**
+   * Handle clear session
+   */
+  private handleClearSession(): void {
+    this.logger.info('Clearing review session');
+    
+    try {
+      // Stop any active polling
+      if (this.currentReviewId) {
+        this.beetleService.stopCommentPolling(this.currentReviewId);
+      }
+      
+      // Clear session data
+      this.currentSession = null;
+      this.currentReviewId = null;
+      
+      // Clear comment threads and decorations
+      this.commentThreads.forEach(thread => thread.dispose());
+      this.commentThreads.clear();
+      this.decoratedLines.clear();
+      
+      // Notify UI that session is cleared
+      this.sendMessage({
+        type: 'reviewSessionUpdated',
+        session: null as any // Session cleared
+      });
+      
+      vscode.window.showInformationMessage('✓ Review session cleared');
+      this.logger.info('Review session cleared successfully');
+      
+    } catch (error) {
+      this.logger.error('Error clearing session', error);
+      vscode.window.showErrorMessage('Failed to clear session');
     }
   }
 
@@ -256,6 +306,53 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     vscode.window.showInformationMessage('Branch selection coming soon!');
   }
 
+
+  /**
+   * Handle mark resolved from webview (sidebar)
+   */
+  private handleMarkResolvedFromWebview(commentId: string, filePath: string, lineStart: number): void {
+    this.logger.info('Mark resolved from webview', { commentId, filePath, lineStart });
+    
+    try {
+      // Find and update the comment in the session
+      if (this.currentSession) {
+        let commentFound = false;
+        
+        for (const fileGroup of this.currentSession.files) {
+          const commentIndex = fileGroup.comments.findIndex(
+            (c: any) => c.file_path === filePath && c.line_start === lineStart
+          );
+          
+          if (commentIndex !== -1) {
+            // Mark comment as resolved
+            fileGroup.comments[commentIndex].resolved = true;
+            this.currentSession.resolvedComments++;
+            commentFound = true;
+            
+            // Send update to webview
+            this.sendReviewSessionUpdate(this.currentSession);
+            
+            this.logger.info('Comment marked as resolved in session', {
+              filePath,
+              lineStart,
+              resolvedCount: this.currentSession.resolvedComments,
+              totalCount: this.currentSession.totalComments
+            });
+            
+            vscode.window.showInformationMessage('✓ Comment marked as resolved');
+            break;
+          }
+        }
+        
+        if (!commentFound) {
+          this.logger.warn('Comment not found in session', { filePath, lineStart });
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error marking comment as resolved from webview', error);
+      vscode.window.showErrorMessage('Failed to mark as resolved');
+    }
+  }
 
   /**
    * Handle open file
@@ -395,6 +492,31 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
           this.commentController = vscode.comments.createCommentController('beetle-review', 'Beetle AI Review');
           this.context.subscriptions.push(this.commentController);
 
+          // Initialize session with ALL files BEFORE starting analysis
+          this.currentSession = {
+            dataId: 'initializing',
+            title: this.getReviewTitle(),
+            branch: {
+              from: branchName,
+              to: 'main'
+            },
+            status: 'running',
+            totalComments: 0,
+            resolvedComments: 0,
+            files: uniqueFilesData.map(file => ({
+              filePath: file.filename,
+              comments: [],
+              criticalCount: 0,
+              highCount: 0,
+              issueCount: 0,
+              expanded: true
+            })),
+            createdAt: new Date()
+          };
+          
+          // Send initial session to UI
+          this.sendReviewSessionUpdate(this.currentSession);
+
           this.logger.info('🚀 Triggering review...');
           const response = await this.beetleService.triggerReview(data);
           
@@ -409,6 +531,13 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
             dataId,
             initialCommentCount: initialComments.length
           });
+          
+          // Update session with real dataId
+          if (this.currentSession) {
+            this.currentSession.dataId = dataId;
+            this.currentReviewId = dataId;
+            this.sendReviewSessionUpdate(this.currentSession);
+          }
           
           // Show initial comments
           this.logger.info(`📝 Processing ${initialComments.length} initial comments...`);
@@ -446,22 +575,35 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
               // Add to inline comments
               this.createInlineComment(comment.content, repo.rootUri);
               
-              // Add to review session (for UI)
+              // Add to session
               this.addCommentToSession(dataId, comment);
               
               progress.report({ 
-                message: `Analyzing... (${totalComments} comments received)`,
+                message: `Analyzing... (${totalComments} comments)`,
               });
             },
             () => {
-              this.logger.info(`🏁 Polling complete. Total comments: ${totalComments}`);
+              // Polling complete - check status
+              this.logger.info(`✅ Comment polling completed for dataId: ${dataId}`);
               
-              // Update review state (mark as no changes)
-              this.updateReviewState();
-              
-              vscode.window.showInformationMessage(
-                `✅ Review complete! ${totalComments} comments added.`
-              );
+              // Check final status and update session
+              this.beetleService.getAnalysisStatus(dataId).then(statusData => {
+                if (this.currentSession && this.currentSession.dataId === dataId) {
+                  this.currentSession.status = statusData.analysis_status as 'running' | 'completed' | 'failed';
+                  this.sendReviewSessionUpdate(this.currentSession);
+                  
+                  this.logger.info(`📊 Analysis status: ${statusData.analysis_status}`);
+                  
+                  // Notify UI that review is complete
+                  if (statusData.analysis_status === 'completed') {
+                    progress.report({ message: `✅ Review complete (${totalComments} comments)` });
+                  } else if (statusData.analysis_status === 'failed') {
+                    progress.report({ message: `❌ Review failed` });
+                  }
+                }
+              }).catch(err => {
+                this.logger.error('Failed to get analysis status', err);
+              });
             }
           );
         } catch (err) {
@@ -508,8 +650,13 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       const thread = this.commentController.createCommentThread(uri, range, []);
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed; // Start collapsed
       thread.canReply = false; // Read-only
+      thread.contextValue = 'beetleComment'; // Enable menu items
       
       this.logger.info(`✅ Comment thread created`);
+      
+      // Extract title first (before cleaning)
+      const titleMatch = content.match(/\*\*Title\*\*:\s*(.+?)(?:\n|$)/);
+      const title = titleMatch ? titleMatch[1].trim() : null;
       
       // Clean up content - remove only metadata fields at the top
       let cleanContent = content
@@ -518,16 +665,22 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         .replace(/\*\*Line_End\*\*:\s*\d+\n?/, '')
         .replace(/\*\*Severity\*\*:\s*\w+\n?/, '')
         .replace(/\*\*Confidence\*\*:\s*[^\n]+\n?/, '')
+        .replace(/\*\*Title\*\*:\s*.+?\n?/, '') // Remove title from body
         .trim();
 
       // Convert HTML <details> to markdown headers (VS Code comments don't support HTML well)
       cleanContent = this.convertDetailsToMarkdown(cleanContent);
+      
+      // If title exists, prepend it as a prominent header
+      if (title) {
+        cleanContent = `## ${title}\n\n${cleanContent}`;
+      }
 
       const newComment: vscode.Comment = {
         body: new vscode.MarkdownString(cleanContent, true),
         mode: vscode.CommentMode.Preview,
         author: { 
-          name: 'Beetle AI', 
+          name: 'Beetle', 
           iconPath: vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'beetle-icon.svg'))
         }
       };
@@ -821,22 +974,15 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    *Add comment to review session (groups by file)
    */
   private addCommentToSession(dataId: string, commentData: any): void {
-    if (!this.currentSession || this.currentSession.dataId !== dataId) {
-      // Create new session (replaces old one)
-      const repo = this.gitAPI?.repositories[0];
-      this.currentSession = {
-        dataId,
-        title: this.getReviewTitle(),
-        branch: {
-          from: repo?.state.HEAD?.name || 'unknown',
-          to: 'main'
-        },
-        status: 'running',
-        totalComments: 0,
-        resolvedComments: 0,
-        files: [],
-        createdAt: new Date()
-      };
+    // Session should already exist from handleTriggerReview
+    if (!this.currentSession) {
+      this.logger.warn('No current session found when adding comment');
+      return;
+    }
+    
+    // Update dataId if it was 'initializing'
+    if (this.currentSession.dataId === 'initializing') {
+      this.currentSession.dataId = dataId;
       this.currentReviewId = dataId;
     }
     
@@ -849,22 +995,25 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       line_start: commentData.line_start,
       line_end: commentData.line_end,
       severity,
+      title: commentData.title,
       confidence: commentData.confidence || '3/5',
       content: commentData.content,
       created_at: new Date()
     };
     
-    // Find or create file group
+    // Find file group (should already exist from initialization)
     let fileGroup = this.currentSession.files.find((f: any) => f.filePath === comment.file_path);
     
     if (!fileGroup) {
+      // Fallback: create if somehow missing
+      this.logger.warn(`File group not found for ${comment.file_path}, creating it`);
       fileGroup = {
         filePath: comment.file_path,
         comments: [],
         criticalCount: 0,
         highCount: 0,
         issueCount: 0,
-        expanded: true  // Auto-expand new files
+        expanded: true
       };
       this.currentSession.files.push(fileGroup);
     }
@@ -1039,6 +1188,119 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     }
   }
   
+  /**
+   * Handle mark resolved action from toolbar
+   */
+  public async handleMarkResolved(thread: vscode.CommentThread): Promise<void> {
+    this.logger.info('Mark resolved clicked', { uri: thread.uri.fsPath, range: thread.range });
+    
+    try {
+      // Safety check for thread.range
+      if (!thread.range) {
+        this.logger.warn('Thread has no range');
+        return;
+      }
+      
+      // Get the file path and line number from the thread
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) {
+        return;
+      }
+      
+      const filePath = vscode.workspace.asRelativePath(thread.uri);
+      const line = thread.range.start.line + 1; // Convert to 1-indexed
+      
+      // Find and update the comment in the session
+      if (this.currentSession) {
+        let commentFound = false;
+        
+        for (const fileGroup of this.currentSession.files) {
+          const commentIndex = fileGroup.comments.findIndex(
+            (c: any) => c.file_path === filePath && c.line_start === line
+          );
+          
+          if (commentIndex !== -1) {
+            // Mark comment as resolved
+            fileGroup.comments[commentIndex].resolved = true;
+            this.currentSession.resolvedComments++;
+            commentFound = true;
+            
+            // Send update to webview
+            this.sendReviewSessionUpdate(this.currentSession);
+            
+            this.logger.info('Comment marked as resolved in session', {
+              filePath,
+              line,
+              resolvedCount: this.currentSession.resolvedComments,
+              totalCount: this.currentSession.totalComments
+            });
+            
+            break;
+          }
+        }
+        
+        if (!commentFound) {
+          this.logger.warn('Comment not found in session', { filePath, line });
+        }
+      }
+      
+      // Dispose the comment thread to remove it from the editor
+      thread.dispose();
+      
+      // Remove from tracked threads
+      const threadKey = `${filePath}:${line}`;
+      this.commentThreads.delete(threadKey);
+      
+      vscode.window.showInformationMessage('✓ Comment marked as resolved');
+      this.logger.info('Comment thread disposed');
+      
+    } catch (error) {
+      this.logger.error('Error marking comment as resolved', error);
+      vscode.window.showErrorMessage('Failed to mark as resolved');
+    }
+  }
+
+  /**
+   * Handle fix with AI action from toolbar
+   */
+  public async handleFixWithAI(thread: vscode.CommentThread): Promise<void> {
+    this.logger.info('Fix with AI clicked');
+    
+    try {
+      // Get the comment content
+      if (!thread.comments || thread.comments.length === 0) {
+        vscode.window.showWarningMessage('No comment content found');
+        return;
+      }
+      
+      const comment = thread.comments[0];
+      const content = comment.body instanceof vscode.MarkdownString 
+        ? comment.body.value 
+        : String(comment.body);
+      
+      // Extract the "Prompt for AI" section
+      const promptMatch = content.match(/\*\*Prompt for AI\*\*\s*([\s\S]*?)(?:\n\n##|\n\n\*\*|$)/);
+      
+      if (!promptMatch || !promptMatch[1]) {
+        vscode.window.showWarningMessage('No AI prompt found in comment');
+        this.logger.warn('No Prompt for AI section found in comment');
+        return;
+      }
+      
+      const aiPrompt = promptMatch[1].trim();
+      
+      // Copy to clipboard
+      await vscode.env.clipboard.writeText(aiPrompt);
+      
+      vscode.window.showInformationMessage('✨ AI prompt copied to clipboard!');
+      this.logger.info('AI prompt copied to clipboard', { promptLength: aiPrompt.length });
+      
+    } catch (error) {
+      this.logger.error('Error extracting AI prompt', error);
+      vscode.window.showErrorMessage('Failed to copy AI prompt');
+    }
+  }
+
   /**
    * Restore inline comments from session data
    */

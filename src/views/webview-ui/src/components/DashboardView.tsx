@@ -14,7 +14,6 @@ export default function DashboardView() {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [files, setFiles] = useState<ReviewFile[]>([]);
-  const [fileCount, setFileCount] = useState(0);
   const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
   const [hasChanges, setHasChanges] = useState(true);
   const [reviewInProgress, setReviewInProgress] = useState(false);
@@ -38,12 +37,16 @@ export default function DashboardView() {
         case 'reviewFilesData':
           console.log('Setting review files:', message.files);
           setFiles(message.files);
-          setFileCount(message.count);
           break;
         case 'reviewSessionUpdated':
           console.log('Review session updated:', message.session);
           // Replace with new session (only store one)
           setReviewSession(message.session);
+          
+          // Auto-stop reviewInProgress if analysis is complete
+          if (message.session.status === 'completed' || message.session.status === 'failed') {
+            setReviewInProgress(false);
+          }
           break;
         case 'changesStateUpdate':
           console.log('Changes state updated:', message.hasChanges);
@@ -85,6 +88,15 @@ export default function DashboardView() {
     });
   };
 
+  const handleClearSession = () => {
+    // Clear session locally
+    setReviewSession(null);
+    setReviewInProgress(false);
+    
+    // Notify extension to clear session
+    vscode.postMessage({ type: 'clearSession' });
+  };
+
   const handleStartReview = () => {
     setReviewInProgress(true);
     
@@ -122,15 +134,21 @@ export default function DashboardView() {
     setReviewSession(null);
   };
 
+  const filteredFiles = reviewSession 
+    ? files.filter(file => 
+        !reviewSession.files.some(sessionFile => sessionFile.filePath === file.path)
+      )
+    : files;
+
   return (
     <div className="p-4">
       {/* <Header onSettings={handleSettings} /> */}
       <AccountSection user={user} onLogout={handleLogout} />
       <BranchSection branch={branches[0] || null} />
       <FilesSection 
-        files={reviewInProgress ? [] : files} 
-        fileCount={fileCount} 
-        disabled={!hasChanges}
+        files={reviewInProgress ? [] : filteredFiles} 
+        fileCount={filteredFiles.length} 
+        disabled={!hasChanges || filteredFiles.length === 0}
         reviewInProgress={reviewInProgress}
         onStartReview={handleStartReview}
         onStopReview={handleStopReview}
@@ -140,6 +158,7 @@ export default function DashboardView() {
           session={reviewSession}
           onFileClick={handleFileClick}
           onToggleFile={handleToggleFile}
+          onClearSession={handleClearSession}
         />
       )}
       {/* {user?.subscriptionStatus === 'free' && <UpgradeSection />} */}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Branch } from '../types';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 
 interface BranchSectionProps {
   branch: Branch | null;
@@ -25,12 +25,12 @@ export default function BranchSection({ branch }: BranchSectionProps) {
         <div className="mt-3">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-vscode-input-bg rounded text-xs">
-              <span>🔧</span>
+              <span><GitBranch className='h-3 w-3'/></span>
               <span>{branch.name}</span>
             </div>
             <span className="opacity-60">←</span>
             <div className="flex items-center gap-1.5 px-2 py-1 bg-vscode-input-bg rounded text-xs">
-              <span>🔧</span>
+              <span><GitBranch className='h-3 w-3'/></span>
               <span>main</span>
             </div>
           </div>

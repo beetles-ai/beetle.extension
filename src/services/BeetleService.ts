@@ -201,6 +201,23 @@ export class BeetleService {
   }
 
   /**
+   * Get analysis status
+   */
+  public async getAnalysisStatus(dataId: string): Promise<{ analysis_status: string; data_id: string }> {
+    try {
+      const statusUrl = `/extension/status/${dataId}`;
+      const response = await this.apiClient.get<{
+        analysis_status: string;
+        data_id: string;
+      }>(statusUrl);
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to get analysis status', error);
+      throw error;
+    }
+  }
+
+  /**
    * Stop polling for a specific dataId
    */
   public stopCommentPolling(dataId: string): void {
