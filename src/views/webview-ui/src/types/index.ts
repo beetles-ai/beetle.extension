@@ -6,7 +6,7 @@ export interface User {
   email: string;
   firstName?: string;
   lastName?: string;
-  planType: 'FREE' | 'PRO' | 'ENTERPRISE';
+  subscriptionStatus: 'free' | 'active';
 }
 
 export interface Repository {
@@ -39,6 +39,9 @@ export type WebviewMessage =
   | { type: 'triggerReview' }
   | { type: 'openSettings' }
   | { type: 'openUpgrade' }
+  | { type: 'openFile'; file: ReviewFile }
+  | { type: 'navigateToComment'; filePath: string; line: number }
+  | { type: 'toggleFile'; filePath: string }
   | { type: 'ready' };
 
 // Extension → Webview messages
@@ -48,4 +51,42 @@ export type ExtensionMessage =
   | { type: 'repositoriesData'; repositories: Repository[] }
   | { type: 'branchesData'; branches: Branch[] }
   | { type: 'reviewFilesData'; files: ReviewFile[]; count: number }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'log'; message: string }
+  | { type: 'reviewSessionUpdated'; session: ReviewSession }
+  | { type: 'changesStateUpdate'; hasChanges: boolean };
+
+// Enhanced UI Types
+export interface CommentData {
+  id: string;
+  file_path: string;
+  line_start: number;
+  line_end: number;
+  severity: 'Critical' | 'High' | 'Medium' | 'Low';
+  confidence: string;
+  content: string;
+  created_at: Date;
+}
+
+export interface FileCommentGroup {
+  filePath: string;
+  comments: CommentData[];
+  criticalCount: number;
+  highCount: number;
+  issueCount: number;
+  expanded: boolean;
+}
+
+export interface ReviewSession {
+  dataId: string;
+  title: string;
+  branch: {
+    from: string;
+    to: string;
+  };
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalComments: number;
+  resolvedComments: number;
+  files: FileCommentGroup[];
+  createdAt: Date;
+}

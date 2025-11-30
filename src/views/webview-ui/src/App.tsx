@@ -18,5 +18,10 @@ export default function App() {
     return cleanup;
   }, [vscode]);
 
+  // Send ready message when component mounts
+  useEffect(() => {
+    vscode.postMessage({ type: 'ready' });
+  }, [vscode]);
+
   return isAuthenticated ? <DashboardView /> : <LoginView />;
 }

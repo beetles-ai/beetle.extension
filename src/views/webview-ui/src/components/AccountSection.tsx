@@ -1,53 +1,64 @@
-import type { User } from '../types';
-import { useVSCode } from '../hooks/useVSCode';
+import { useState } from 'react';
+import { User } from '../types';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface AccountSectionProps {
   user: User | null;
+  onLogout: () => void;
 }
 
-export default function AccountSection({ user }: AccountSectionProps) {
-  const vscode = useVSCode();
-  console.log(user, "here is teh user");
+export default function AccountSection({ user, onLogout }: AccountSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleLogout = () => {
-    vscode.postMessage({ type: 'logout' });
-  };
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="mb-5 pb-4 border-b border-vscode-border">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[11px] font-semibold uppercase opacity-60 tracking-wider">
-          ACCOUNT
-        </div>
-        {user && (
-          <span className="px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-[#1e1e1e] text-[#4a9eff] border-[#4a9eff]">
-            {user.planType || 'FREE'}
+    <div className="mb-4">
+      <div 
+        className="flex items-center justify-between cursor-pointer py-1"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-2">
+        <span className="text-xs ">{isExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+          <span className="text-xs text-white tracking-wider">
+            Account
           </span>
-        )}
-      </div>
-      
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col">
-          <span className="text-sm font-medium">
-            {user ? (user.firstName ? `${user.firstName} ${user.lastName || ''}` : user.username) : 'Loading...'}
+          <span className="px-2 py-0.5 text-[10px] border border-white/30 rounded">
+            {user.subscriptionStatus }
           </span>
-          {user && user.email && (
-            <span className="text-xs opacity-60 truncate max-w-[200px]">
-              {user.email}
-            </span>
-          )}
         </div>
-        
-        <button 
-          onClick={handleLogout}
-          className="p-1.5 hover:bg-vscode-button-hover rounded opacity-60 hover:opacity-100 transition-all"
-          title="Logout"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M12 10V8H7V6h5V4l3 3-3 3zm-1-1v4H6v3l-5-1V1h5v3h2V1a1 1 0 0 0-1-1H1a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3h-1z"/>
-          </svg>
-        </button>
       </div>
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-beetle-primary/20 flex items-center justify-center text-lg">
+              {user.firstName?.[0] || user.email[0].toUpperCase()}
+            </div>
+            <div>
+              <div className="font-medium">
+                {user.firstName && user.lastName 
+                  ? `${user.firstName} ${user.lastName}`
+                  : user.username || user.email
+                }
+              </div>
+              <div className="text-xs opacity-60">{user.email}</div>
+            </div>
+          </div>
+          
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onLogout();
+            }}
+            className="text-xs text-red-400 hover:text-red-300 transition-colors"
+          >
+            Logout
+          </button>
+        </div>
+      )}
     </div>
   );
 }
