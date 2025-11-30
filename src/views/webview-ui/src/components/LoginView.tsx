@@ -18,7 +18,7 @@ export default function LoginView() {
       </div>
 
       {/* Title */}
-      <h1 className="text-xl font-semibold mb-3">Welcome to Beetle AI</h1>
+      <h1 className="text-xl font-semibold mb-3">Welcome to Beetle</h1>
       <p className="text-sm font-semibold opacity-80 mb-6 max-w-xs leading-relaxed">
         AI Code Reviewer That Thinks Like Humans
       </p>
