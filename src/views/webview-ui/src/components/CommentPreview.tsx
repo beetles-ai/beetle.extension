@@ -89,7 +89,7 @@ export default function CommentPreview({ comment, onClick }: CommentPreviewProps
         </div>
         
         {/* Utility Icons - show on hover, hide if resolved */}
-        {!comment.resolved && (
+        {/* {!comment.resolved && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleFixWithAI}
@@ -106,7 +106,7 @@ export default function CommentPreview({ comment, onClick }: CommentPreviewProps
               <Check className="h-3 w-3 text-green-500" />
             </button>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );

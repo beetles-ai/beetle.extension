@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useVSCode } from '../hooks/useVSCode';
 import type { ReviewFile } from '../types';
 import { File, ChevronRight, ChevronDown } from 'lucide-react';
@@ -8,6 +8,7 @@ interface FilesSectionProps {
   fileCount: number;
   disabled?: boolean;
   reviewInProgress: boolean;
+  isStarting?: boolean;
   onStartReview: () => void;
   onStopReview: () => void;
 }
@@ -17,11 +18,22 @@ export default function FilesSection({
   fileCount, 
   disabled = false,
   reviewInProgress,
+  isStarting = false,
   onStartReview,
   onStopReview
 }: FilesSectionProps) {
   const vscode = useVSCode();
   const [isExpanded, setIsExpanded] = useState(true);
+  const prevFileCountRef = useRef<number>(fileCount);
+
+  // Auto-collapse only when files transition from having items to empty
+  useEffect(() => {
+    // Only collapse if we HAD files before and now have none
+    if (prevFileCountRef.current > 0 && fileCount === 0) {
+      setIsExpanded(false);
+    }
+    prevFileCountRef.current = fileCount;
+  }, [fileCount]);
 
   const handleReview = () => {
     if (disabled) return;
@@ -92,6 +104,16 @@ export default function FilesSection({
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <span className="text-xs opacity-60"><File className='h-3 w-3'/></span>
                     <span className="text-xs truncate">{file.path}</span>
+                    
+                    {/* Incremental change indicator */}
+                    {/* {file.isIncremental && (
+                      <span 
+                        className="text-xs bg-yellow-600/70 text-white px-1.5 py-0.5 rounded font-mono"
+                        title="File has new changes since last review"
+                      >
+                        Δ
+                      </span>
+                    )} */}
                   </div>
                   {reviewInProgress ? <></> :<span className={`text-xs ${getStatusColor(file.status)} ml-2 flex-shrink-0`}>
                     {getStatusLetter(file.status)}
@@ -113,14 +135,14 @@ export default function FilesSection({
           ) : (
             <button
               onClick={handleReview}
-              disabled={disabled}
+              disabled={disabled || isStarting}
               className={`w-full mt-4 py-1 rounded transition-all font-medium text-sm ${
-                disabled
+                disabled || isStarting
                   ? 'bg-beetle-primary/30 text-white/50 cursor-not-allowed'
                   : 'bg-beetle-primary hover:bg-beetle-primary-dark text-black cursor-pointer'
               }`}
             >
-              Review all changes
+              {isStarting ? 'Starting...' : 'Review all changes'}
             </button>
           )}
       

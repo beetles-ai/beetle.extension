@@ -3,11 +3,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as cp from 'child_process';
 import * as util from 'util';
+import * as crypto from 'crypto';
+import * as os from 'os';
 import { AuthenticationProvider } from '../authentication/AuthenticationProvider';
 import { BeetleService } from '../services/BeetleService';
 import { Logger } from '../utils/logger';
 import { WebviewMessage, ExtensionMessage, ReviewFile } from '../types';
 import { VIEW_ID_MAIN } from '../utils/constants';
+import { generateSessionName, resetSessionCounter } from '../utils/sessionNames';
 
 const exec = util.promisify(cp.exec);
 
@@ -24,8 +27,9 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   private gutterDecorationType: vscode.TextEditorDecorationType; // Beetle icon in gutter
   private decoratedLines: Map<string, number[]> = new Map(); // Track which lines have icons per file
   
-  // Review session management - only store ONE session
-  private currentSession: any | null = null;
+  // Review session management - store MULTIPLE sessions for progressive review
+  private sessions: any[] = []; // All review sessions
+  private currentSession: any | null = null; // Current active session
   private currentReviewId: string | null = null;
   private lastReviewState: {
     branch: string;
@@ -67,6 +71,11 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         await this.loadUserData();
       }
     });
+    
+    // Register content provider for diff view
+    this.context.subscriptions.push(
+      vscode.workspace.registerTextDocumentContentProvider('beetle-original', this as any)
+    );
   }
 
   public resolveWebviewView(
@@ -170,7 +179,8 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         break;
 
       case 'triggerReview':
-        await this.handleTriggerReview();
+        const filePaths = 'filePaths' in message ? message.filePaths : undefined;
+        await this.handleTriggerReview(filePaths);
         break;
 
       case 'openSettings':
@@ -189,7 +199,8 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         
       case 'toggleFile':
         if ('filePath' in message) {
-          this.handleToggleFile(message.filePath);
+          const sessionId = 'sessionId' in message ? message.sessionId : undefined;
+          this.handleToggleFile(message.filePath, sessionId);
         }
         break;
   
@@ -205,6 +216,16 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'clearSession':
         this.handleClearSession();
+        break;
+
+      case 'deleteSession':
+        const sessionId = 'sessionId' in message ? message.sessionId : '';
+        this.handleDeleteSession(sessionId);
+        break;
+
+      case 'stopReview':
+        const stopSessionId = 'sessionId' in message ? message.sessionId : '';
+        this.handleStopReview(stopSessionId);
         break;
 
       default:
@@ -244,6 +265,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       }
       
       // Clear session data
+      this.sessions = []; // Clear ALL sessions
       this.currentSession = null;
       this.currentReviewId = null;
       
@@ -252,10 +274,17 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       this.commentThreads.clear();
       this.decoratedLines.clear();
       
+      // Reset session counter
+      resetSessionCounter();
+      
+      // Persist the cleared session (removes from globalState)
+      this.saveCachedSessions();
+      
       // Notify UI that session is cleared
       this.sendMessage({
-        type: 'reviewSessionUpdated',
-        session: null as any // Session cleared
+        type: 'reviewSessionsUpdated',
+        sessions: [],
+        currentSessionId: null
       });
       
       vscode.window.showInformationMessage('✓ Review session cleared');
@@ -266,6 +295,114 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       vscode.window.showErrorMessage('Failed to clear session');
     }
   }
+
+  /**
+   * Handle delete specific session
+   */
+  private handleDeleteSession(sessionId: string): void {
+    this.logger.info(`Deleting session: ${sessionId}`);
+    
+    try {
+      // Find and remove session
+      const sessionIndex = this.sessions.findIndex(s => s.dataId === sessionId);
+      if (sessionIndex === -1) {
+        this.logger.warn(`Session not found: ${sessionId}`);
+        return;
+      }
+      
+      // Remove session
+      this.sessions.splice(sessionIndex, 1);
+      
+      // If we deleted the current session, set current to the next one
+      if (this.currentSession?.dataId === sessionId) {
+        this.currentSession = this.sessions[0] || null;
+        this.currentReviewId = this.currentSession?.dataId || null;
+      }
+      
+      // Persist changes
+      this.saveCachedSessions();
+      
+      // Notify UI
+      this.sendMessage({
+        type: 'reviewSessionsUpdated',
+        sessions: this.sessions,
+        currentSessionId: this.currentSession?.dataId || null
+      });
+      
+      this.logger.info(`✅ Deleted session: ${sessionId}`);
+      
+    } catch (error) {
+      this.logger.error('Error deleting session', error);
+      vscode.window.showErrorMessage('Failed to delete session');
+    }
+  }
+  
+  /**
+   * Handle stop review - interrupt ongoing analysis
+   */
+  private async handleStopReview(sessionId: string): Promise<void> {
+    this.logger.info(`Stopping review: ${sessionId}`);
+    
+    try {
+      // Find the session
+      const session = this.sessions.find(s => s.dataId === sessionId);
+      if (!session) {
+        this.logger.warn(`Session not found: ${sessionId}`);
+        return;
+      }
+
+      // Only allow stopping if currently running
+      if (session.status !== 'running') {
+        vscode.window.showInformationMessage('Analysis is not running');
+        return;
+      }
+
+      // Call API to stop the analysis
+      const result = await this.beetleService.stopReview(sessionId);
+      
+      if (!result) {
+        vscode.window.showErrorMessage('Failed to stop analysis');
+        return;
+      }
+
+      this.logger.info(`✅ Analysis stopped: ${sessionId}`, result);
+
+      // Update session status
+      session.status = 'interrupted';
+
+      // Stop polling
+      this.beetleService.stopCommentPolling(sessionId);
+
+      // If this is the current session, clear it
+      if (this.currentSession?.dataId === sessionId) {
+        this.currentSession = null;
+        this.currentReviewId = null;
+      }
+
+      // Persist changes
+      this.saveCachedSessions();
+
+      // Notify UI
+      this.sendMessage({
+        type: 'reviewSessionsUpdated',
+        sessions: this.sessions,
+        currentSessionId: this.currentSession?.dataId || null
+      });
+
+      vscode.window.showInformationMessage('✓ Review stopped');
+      
+    } catch (error) {
+      this.logger.error('Error stopping review', error);
+      vscode.window.showErrorMessage('Failed to stop review');
+    }
+  }
+  
+  private getReviewTitle(): string {
+    const repo = this.gitAPI?.repositories[0];
+    const branchName = repo?.state.HEAD?.name || 'main';
+    // Pass existing sessions to determine next sequential number
+    return generateSessionName(branchName, this.sessions);
+  }    
 
   /**
    * Handle repository selection
@@ -355,26 +492,9 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Handle open file
-   */
-  private async handleOpenFile(file: ReviewFile): Promise<void> {
-    try {
-      if (!this.gitAPI || this.gitAPI.repositories.length === 0) return;
-      const repo = this.gitAPI.repositories[0];
-      const fileUri = vscode.Uri.joinPath(repo.rootUri, file.path);
-      
-      // Open diff view (working tree)
-      await vscode.commands.executeCommand('git.openChange', fileUri);
-    } catch (error) {
-      this.logger.error('Failed to open file', error);
-      vscode.window.showErrorMessage('Failed to open file');
-    }
-  }
-
-  /**
    * Handle trigger review
    */
-  private async handleTriggerReview(): Promise<void> {
+  private async handleTriggerReview(filePaths?: string[]): Promise<void> {
     try {
       if (!this.gitAPI || this.gitAPI.repositories.length === 0) {
         vscode.window.showErrorMessage('No repository found');
@@ -411,13 +531,64 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
             const filePath = vscode.workspace.asRelativePath(change.uri);
             const status = this.mapGitStatus(change.status);
             
+            // Get current content for incremental tracking
+            let currentContent = '';
+            try {
+              currentContent = await fs.promises.readFile(path.join(cwd, filePath), 'utf8');
+            } catch (e) {
+              this.logger.warn(`Failed to read content for ${filePath}`, e);
+            }
+
+            // Check for previous review content - use MOST RECENT session
+            let lastReviewedContent: string | null = null;
+            let lastReviewedHash: string | null = null;
+            
+            // Find the most recent session that reviewed this file
+            for (const session of this.sessions) {
+              const file = session.files.find((f: any) => f.filePath === filePath);
+              if (file && file.lastReviewedContent) {
+                lastReviewedContent = file.lastReviewedContent;
+                lastReviewedHash = file.lastReviewedHash || null;
+                // Use the first (most recent) session found
+                break;
+              }
+            }
+            
+            // Calculate current file content hash
+            const currentContentHash = this.calculateFileHash(currentContent);
+            
+            // If hash matches, skip this file (no changes)
+            if (lastReviewedHash && currentContentHash === lastReviewedHash) {
+              this.logger.info(`⏭️ Skipping ${filePath} - no changes since last review (hash match)`);
+              return null; // Signal to filter this out
+            }
+            
             // Get diff for this file
             let patch = '';
             try {
-              const { stdout } = await exec(`git diff HEAD -- "${filePath}"`, { cwd });
-              patch = stdout;
+              if (lastReviewedContent && currentContent) {
+                // Incremental review: diff between last reviewed content and current
+                this.logger.info(`🔄 Calculating incremental diff for ${filePath} (since last review)`);
+                patch = await this.getIncrementalDiff(lastReviewedContent, currentContent, filePath);
+                
+                if (!patch || patch.trim() === '') {
+                  this.logger.info(`⏭️ No incremental changes for ${filePath} - skipping`);
+                  return null; // Filter out files with no changes
+                }
+              } else {
+                // First-time review: use standard diff logic
+                const isUntracked = change.status === 7; // UNTRACKED
+                
+                if (isUntracked) {
+                  patch = currentContent; // Use full content for untracked
+                } else {
+                  const { stdout } = await exec(`git diff HEAD -- "${filePath}"`, { cwd });
+                  patch = stdout;
+                }
+              }
             } catch (e) {
               this.logger.warn(`Failed to get diff for ${filePath}`, e);
+              return null; // Skip on error
             }
 
             // Estimate additions/deletions from patch
@@ -429,12 +600,30 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
               status,
               additions: Math.max(0, additions),
               deletions: Math.max(0, deletions),
-              patch
+              patch,
+              lastReviewedContent: currentContent // Store for next time
             };
           }));
 
-          // Remove duplicates
-          const uniqueFilesData = Array.from(new Map(filesData.map(f => [f.filename, f])).values());
+          // Remove nulls (files with no changes) and duplicates
+          let uniqueFilesData = filesData
+            .filter((f): f is NonNullable<typeof f> => f !== null)
+            .filter((f, index, self) => 
+              index === self.findIndex((ff) => ff.filename === f.filename)
+            );
+          
+          // INCREMENTAL: Filter to only specified files if provided
+          if (filePaths && filePaths.length > 0) {
+            this.logger.info(`🔄 Incremental review: filtering to ${filePaths.length} files`, { filePaths });
+            uniqueFilesData = uniqueFilesData.filter(f => filePaths.includes(f.filename));
+          } else {
+            this.logger.info(`🌟 Full review: ${uniqueFilesData.length} files`);
+          }
+          
+          if (uniqueFilesData.length === 0) {
+            vscode.window.showInformationMessage('No new changes to review');
+            return;
+          }
 
           // Get remote URL
           let remoteUrl = repo.rootUri.fsPath;
@@ -485,37 +674,19 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
 
           progress.report({ message: "Submitting review..." });
           
-          // Clear existing comments, threads, and gutter decorations
-          this.commentThreads.clear();
-          this.decoratedLines.clear();
-          this.commentController.dispose();
-          this.commentController = vscode.comments.createCommentController('beetle-review', 'Beetle AI Review');
-          this.context.subscriptions.push(this.commentController);
-
-          // Initialize session with ALL files BEFORE starting analysis
-          this.currentSession = {
-            dataId: 'initializing',
-            title: this.getReviewTitle(),
-            branch: {
-              from: branchName,
-              to: 'main'
-            },
-            status: 'running',
-            totalComments: 0,
-            resolvedComments: 0,
-            files: uniqueFilesData.map(file => ({
-              filePath: file.filename,
-              comments: [],
-              criticalCount: 0,
-              highCount: 0,
-              issueCount: 0,
-              expanded: true
-            })),
-            createdAt: new Date()
-          };
-          
-          // Send initial session to UI
-          this.sendReviewSessionUpdate(this.currentSession);
+          // DON'T clear existing comments/threads for incremental reviews
+          // Only clear if this is a full review (no filePaths specified)
+          if (!filePaths) {
+            this.logger.info('🗑️ Full review: clearing previous comments');
+            this.commentThreads.forEach(thread => thread.dispose());
+            this.commentThreads.clear();
+            this.decoratedLines.clear();
+            this.commentController.dispose();
+            this.commentController = vscode.comments.createCommentController('beetle-review', 'Beetle AI Review');
+            this.context.subscriptions.push(this.commentController);
+          } else {
+            this.logger.info('📝 Incremental review: keeping previous comments');
+          }
 
           this.logger.info('🚀 Triggering review...');
           const response = await this.beetleService.triggerReview(data);
@@ -523,6 +694,10 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
           if (!response) {
             this.logger.error('❌ No response from triggerReview');
             vscode.window.showErrorMessage('Failed to submit review');
+            this.sendMessage({
+              type: 'error',
+              message: 'Failed to submit review'
+            });
             return;
           }
 
@@ -532,12 +707,41 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
             initialCommentCount: initialComments.length
           });
           
-          // Update session with real dataId
-          if (this.currentSession) {
-            this.currentSession.dataId = dataId;
-            this.currentReviewId = dataId;
-            this.sendReviewSessionUpdate(this.currentSession);
-          }
+          // Initialize session with ALL files AFTER starting analysis
+          this.currentSession = {
+            dataId: dataId,
+            title: this.getReviewTitle(),
+            branch: {
+              from: branchName,
+              to: 'main'
+            },
+            status: 'running',
+            totalComments: 0,
+            resolvedComments: 0,
+            files: uniqueFilesData.map(file => {
+              // Get current content hash (hash of the actual file content, not patch)
+              const currentContentHash = this.calculateFileHash(file.lastReviewedContent || '');
+              
+              return {
+                filePath: file.filename,
+                comments: [],
+                criticalCount: 0,
+                highCount: 0,
+                issueCount: 0,
+                expanded: false, // Default to collapsed
+                // Progressive review tracking - store file content hash, not patch hash
+                lastReviewedHash: currentContentHash, // Hash of file content when reviewed
+                lastReviewedPatch: file.patch,
+                lastReviewedContent: file.lastReviewedContent, // Full file content when reviewed
+                reviewedAt: new Date()
+              };
+            }),
+            createdAt: new Date()
+          };
+          this.currentReviewId = dataId;
+          
+          // Send initial session to UI
+          this.sendReviewSessionUpdate(this.currentSession);
           
           // Show initial comments
           this.logger.info(`📝 Processing ${initialComments.length} initial comments...`);
@@ -615,6 +819,10 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       this.logger.error('Failed to trigger review', error);
       vscode.window.showErrorMessage('Failed to trigger review');
+      this.sendMessage({
+        type: 'error',
+        message: 'Failed to trigger review'
+      });
     }
   }
 
@@ -765,6 +973,11 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     const styleUri = this.view!.webview.asWebviewUri(
       vscode.Uri.file(path.join(webviewPath, 'index.css'))
     );
+    
+    // Get URI for beetle.png image
+    const beetleImageUri = this.view!.webview.asWebviewUri(
+      vscode.Uri.file(path.join(webviewPath, 'beetle.png'))
+    );
 
     // Use a nonce to whitelist scripts
     const nonce = getNonce();
@@ -774,9 +987,12 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.view!.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this.view!.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${this.view!.webview.cspSource} data:;">
   <link href="${styleUri}" rel="stylesheet">
   <title>Beetle</title>
+  <script nonce="${nonce}">
+    window.beetleImageUri = "${beetleImageUri}";
+  </script>
 </head>
 <body>
   <div id="root"></div>
@@ -883,16 +1099,59 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       
       this.logger.info('Found changes', { count: changes.length });
 
-      // Map to ReviewFile format
-      const reviewFiles = changes.map(change => {
+      // Map to ReviewFile format with patches and hashes
+      const cwd = repo.rootUri.fsPath;
+      const reviewFiles = await Promise.all(changes.map(async (change) => {
         const filePath = vscode.workspace.asRelativePath(change.uri);
+        
+        // Get current file content for hash calculation
+        let currentContent = '';
+        try {
+          currentContent = await fs.promises.readFile(path.join(cwd, filePath), 'utf8');
+        } catch (e) {
+          this.logger.warn(`Failed to read content for ${filePath}`, e);
+        }
+        
+        // Get diff/content for this file
+        let patch = '';
+        const isUntracked = change.status === 7; // UNTRACKED
+        
+        try {
+          if (isUntracked) {
+            // For untracked files, git diff HEAD fails, so we use the file content
+            patch = currentContent; // Use content as patch for untracked files
+          } else {
+            // For tracked files, get diff against HEAD
+            const { stdout } = await exec(`git diff HEAD -- "${filePath}"`, { cwd });
+            patch = stdout;
+            this.logger.info(`Fetched diff for ${filePath}: ${patch.length} chars`);
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to get diff/content for ${filePath}`, e);
+        }
+        
+        // Calculate additions/deletions
+        let additions = 0;
+        let deletions = 0;
+        
+        if (isUntracked) {
+          // For untracked, all lines are additions
+          additions = currentContent.split('\n').length;
+        } else {
+          additions = (patch.match(/^\+/gm) || []).length - 1;
+          deletions = (patch.match(/^-/gm) || []).length - 1;
+        }
+        
         return {
           path: filePath,
           status: this.mapGitStatus(change.status),
-          additions: 0, // Git API doesn't give line counts easily without diff
-          deletions: 0
+          additions: Math.max(0, additions),
+          deletions: Math.max(0, deletions),
+          patch,
+          contentHash: this.calculateFileHash(currentContent), // Hash of FILE CONTENT, not patch
+          expanded: false // Default to collapsed
         };
-      });
+      }));
 
       // Remove duplicates (file could be in both index and working tree)
       const uniqueFiles = Array.from(new Map(reviewFiles.map(f => [f.path, f])).values());
@@ -908,10 +1167,114 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Provide content for beetle-original scheme
+   * For incremental reviews: returns lastReviewedContent (shows only new changes)
+   * For first-time reviews: returns HEAD content (shows all changes)
+   */
+  async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+    try {
+      if (!this.gitAPI || this.gitAPI.repositories.length === 0) {
+        return '';
+      }
+      
+      const repo = this.gitAPI.repositories[0];
+      const cwd = repo.rootUri.fsPath;
+      
+      // uri.path is /relative/path/to/file
+      // Remove leading slash
+      const relPath = uri.path.startsWith('/') ? uri.path.substring(1) : uri.path;
+      
+      // PRIORITY 1: Check for lastReviewedContent from most recent session (for incremental diff)
+      // This shows only the NEW changes since last review, not all changes from HEAD
+      for (const session of this.sessions) {
+        const sessionFile = session.files.find((f: any) => f.filePath === relPath);
+        
+        if (sessionFile && sessionFile.lastReviewedContent) {
+          this.logger.info(`📋 Using lastReviewedContent for ${relPath} from session ${session.dataId} (incremental diff)`);
+          return sessionFile.lastReviewedContent;
+        }
+      }
+      
+      // PRIORITY 2: Check if file was untracked in previous session
+      for (let i = this.sessions.length - 1; i >= 0; i--) {
+        const session = this.sessions[i];
+        const sessionFile = session.files.find((f: any) => f.filePath === relPath);
+        
+        // If file was untracked in previous session, use its content as base
+        // Status 'U' comes from mapGitStatus for untracked files
+        if (sessionFile && sessionFile.status === 'U' && sessionFile.lastReviewedPatch) {
+          this.logger.info(`Found previous untracked content for ${relPath} in session ${session.dataId}`);
+          return sessionFile.lastReviewedPatch;
+        }
+      }
+
+      // PRIORITY 3: Check if file is currently untracked (new file, no previous review)
+      const change = repo.state.workingTreeChanges.find(c => c.uri.path.endsWith(relPath));
+      const isUntracked = change && change.status === 7;
+
+      if (isUntracked) {
+        this.logger.info(`New untracked file ${relPath} - returning empty for diff`);
+        return ''; // No previous review, return empty (new file)
+      }
+      
+      // PRIORITY 4: Fallback to HEAD content (first-time review, no previous session)
+      try {
+        const { stdout } = await exec(`git show HEAD:"${relPath}"`, { cwd });
+        this.logger.info(`Using HEAD content for ${relPath} (first-time review)`);
+        return stdout;
+      } catch (e) {
+        this.logger.warn(`Failed to get HEAD content for ${relPath}`, e);
+        return ''; // Return empty if fails
+      }
+    } catch (error) {
+      this.logger.error('Error providing document content', error);
+      return '';
+    }
+  }
 
   /**
-   * Navigate to comment location in editor and reveal the comment thread
+   * Handle open file - Opens Diff View
    */
+  private async handleOpenFile(file: ReviewFile): Promise<void> {
+    try {
+      if (!this.gitAPI || this.gitAPI.repositories.length === 0) {
+        return;
+      }
+      
+      const repo = this.gitAPI.repositories[0];
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      
+      if (!workspaceFolder) {
+        return;
+      }
+      
+      // Left side: Original (HEAD)
+      // Use custom scheme to provide content
+      const originalUri = vscode.Uri.parse(`beetle-original:///${file.path}`);
+      
+      // Right side: Current (Working Tree)
+      const currentUri = vscode.Uri.joinPath(workspaceFolder.uri, file.path);
+      
+      const fileName = path.basename(file.path);
+      const title = `Changes being reviewed: ${fileName}`;
+      
+      this.logger.info(`Opening diff view for ${file.path}`);
+      
+      // Open Diff View
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        originalUri,
+        currentUri,
+        title,
+        { preview: false }
+      );
+      
+    } catch (error) {
+      this.logger.error('Failed to open file', error);
+      vscode.window.showErrorMessage('Failed to open file diff');
+    }
+  }
   private async handleNavigateToComment(filePath: string, line: number): Promise<void> {
     try {
       if (!this.gitAPI || this.gitAPI.repositories.length === 0) {
@@ -958,15 +1321,25 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   /**
    * Toggle file expansion in review session
    */
-  private handleToggleFile(filePath: string): void {
-    if (!this.currentSession) {
+  /**
+   * Toggle file expansion in review session
+   */
+  private handleToggleFile(filePath: string, sessionId?: string): void {
+    let session = this.currentSession;
+    
+    // If sessionId provided, find that session
+    if (sessionId) {
+      session = this.sessions.find(s => s.dataId === sessionId) || this.currentSession;
+    }
+    
+    if (!session) {
       return;
     }
     
-    const fileGroup = this.currentSession.files.find((f: any) => f.filePath === filePath);
+    const fileGroup = session.files.find((f: any) => f.filePath === filePath);
     if (fileGroup) {
       fileGroup.expanded = !fileGroup.expanded;
-      this.sendReviewSessionUpdate(this.currentSession);
+      this.sendReviewSessionUpdate(session);
     }
   }
   
@@ -1013,7 +1386,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         criticalCount: 0,
         highCount: 0,
         issueCount: 0,
-        expanded: true
+        expanded: false // Default to collapsed
       };
       this.currentSession.files.push(fileGroup);
     }
@@ -1065,23 +1438,95 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   /**
    * Get review title for session
    */
-  private getReviewTitle(): string {
-    const repo = this.gitAPI?.repositories[0];
-    if (!repo) {
-      return 'Code Review';
+  /**
+   * Calculate hash of file content for change detection
+   */
+  private calculateFileHash(content: string): string {
+    if (!content || content.trim() === '') {
+      return '';
     }
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+
+  /**
+   * Create a temporary file with content
+   */
+  private async createTempFile(content: string): Promise<string> {
+    const tmpDir = os.tmpdir();
+    const filename = `beetle-diff-${Date.now()}-${Math.random().toString(36).substring(7)}.tmp`;
+    const filePath = path.join(tmpDir, filename);
+    await fs.promises.writeFile(filePath, content, 'utf8');
+    return filePath;
+  }
+
+  /**
+   * Get incremental diff between two content strings using git diff --no-index
+   */
+  private async getIncrementalDiff(oldContent: string, newContent: string, filename: string): Promise<string> {
+    let oldFile = '';
+    let newFile = '';
     
-    const branchName = repo.state.HEAD?.name || 'unknown';
-    return `Review: ${branchName}`;
+    try {
+      oldFile = await this.createTempFile(oldContent);
+      newFile = await this.createTempFile(newContent);
+      
+      // git diff --no-index oldFile newFile
+      // We use --no-index to compare two arbitrary files
+      // We use --unified=3 (default) for context
+      const { stdout } = await exec(`git diff --no-index -- "${oldFile}" "${newFile}"`, { 
+        cwd: os.tmpdir() // Run in tmp to avoid repo config interference
+      });
+      
+      return stdout;
+    } catch (error: any) {
+      // git diff returns exit code 1 if differences are found, which exec treats as error
+      if (error.code === 1 && error.stdout) {
+        // Fix the header lines to match the actual filename instead of temp filenames
+        let diff = error.stdout as string;
+        const lines = diff.split('\n');
+        
+        // Replace the --- and +++ lines
+        for (let i = 0; i < Math.min(lines.length, 5); i++) {
+          if (lines[i].startsWith('--- ')) {
+            lines[i] = `--- a/${filename}`;
+          } else if (lines[i].startsWith('+++ ')) {
+            lines[i] = `+++ b/${filename}`;
+          }
+        }
+        return lines.join('\n');
+      }
+      
+      this.logger.warn('Error calculating incremental diff', error);
+      return ''; // Return empty if real error or no diff
+    } finally {
+      // Cleanup temp files
+      if (oldFile) {
+        await fs.promises.unlink(oldFile).catch(() => {});
+      }
+      if (newFile) {
+        await fs.promises.unlink(newFile).catch(() => {});
+      }
+    }
   }
   
   /**
    * Send review session update to webview
    */
   private sendReviewSessionUpdate(session: any): void {
+    // Add or update session in the array
+    const existingIndex = this.sessions.findIndex(s => s.dataId === session.dataId);
+    if (existingIndex >= 0) {
+      // Update existing session
+      this.sessions[existingIndex] = session;
+    } else {
+      // Add new session at the beginning (newest first)
+      this.sessions.unshift(session);
+    }
+    
     this.sendMessage({
-      type: 'reviewSessionUpdated',
-      session
+      type: 'reviewSessionsUpdated',
+      sessions: this.sessions, // Send ALL sessions
+      currentSessionId: this.currentSession?.dataId || null // Send ACTUAL current session, not just the updated one
     });
     
     // Save to storage for persistence
@@ -1154,12 +1599,12 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    * Save current session to extension storage
    */
   private saveCachedSessions(): void {
-    if (this.currentSession) {
-      this.context.globalState.update('beetleCurrentSession', this.currentSession);
-      this.logger.info(`💾 Saved current session to cache`);
+    if (this.sessions.length > 0) {
+      this.context.globalState.update('beetleSessions', this.sessions);
+      this.logger.info(`💾 Saved ${this.sessions.length} session(s) to cache`);
     } else {
-      this.context.globalState.update('beetleCurrentSession', null);
-      this.logger.info(`💾 Cleared cached session`);
+      this.context.globalState.update('beetleSessions', null);
+      this.logger.info(`💾 Cleared cached sessions`);
     }
   }
   
@@ -1167,24 +1612,28 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    * Restore session from extension storage and recreate inline comments
    */
   private restoreCachedSessions(): void {
-    const saved = this.context.globalState.get<any | null>('beetleCurrentSession', null);
+    const savedSessions = this.context.globalState.get<any[] | null>('beetleSessions', null);
     
-    if (saved) {
-      this.logger.info(`📂 Restoring cached session: ${saved.dataId}`);
+    if (savedSessions && savedSessions.length > 0) {
+      this.logger.info(`📂 Restoring ${savedSessions.length} cached session(s)`);
       
-      // Restore to current session
-      this.currentSession = saved;
+      // Restore all sessions
+      this.sessions = savedSessions;
+      this.currentSession = savedSessions[0]; // Most recent
       
-      // Send session to webview
+      // Send sessions to webview
       this.sendMessage({
-        type: 'reviewSessionUpdated',
-        session: saved
+        type: 'reviewSessionsUpdated',
+        sessions: this.sessions,
+        currentSessionId: this.currentSession.dataId
       });
       
-      // Recreate inline comments
-      this.restoreInlineComments(saved);
+      // Recreate inline comments for all sessions
+      savedSessions.forEach(session => {
+        this.restoreInlineComments(session);
+      });
       
-      this.logger.info(`✅ Restored session with ${saved.totalComments} comments`);
+      this.logger.info(`✅ Restored ${savedSessions.length} session(s)`);
     }
   }
   

@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useVSCode } from '../hooks/useVSCode';
-import type { User, ReviewFile, Repository, Branch, ReviewSession } from '../types';
-import Header from './Header';
+import type { User, ReviewFile, Branch, ReviewSession } from '../types';
 import AccountSection from './AccountSection';
 import BranchSection from './BranchSection';
 import FilesSection from './FilesSection';
-import UpgradeSection from './UpgradeSection';
 import ReviewSessionsList from './ReviewSessionsList';
 
 export default function DashboardView() {
   const vscode = useVSCode();
   const [user, setUser] = useState<User | null>(null);
-  const [repositories, setRepositories] = useState<Repository[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [files, setFiles] = useState<ReviewFile[]>([]);
-  const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
+  const [sessions, setSessions] = useState<ReviewSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(true);
   const [reviewInProgress, setReviewInProgress] = useState(false);
 
+  const [isStarting, setIsStarting] = useState(false);
+
+  console.log(sessions, "here are the sessions")
   useEffect(() => {
     const cleanup = vscode.onMessage((message) => {
       console.log('DashboardView received message:', message.type, message);
@@ -28,7 +29,6 @@ export default function DashboardView() {
           break;
         case 'repositoriesData':
           console.log('Setting repositories:', message.repositories);
-          setRepositories(message.repositories);
           break;
         case 'branchesData':
           console.log('Setting branches:', message.branches);
@@ -38,13 +38,20 @@ export default function DashboardView() {
           console.log('Setting review files:', message.files);
           setFiles(message.files);
           break;
-        case 'reviewSessionUpdated':
-          console.log('Review session updated:', message.session);
-          // Replace with new session (only store one)
-          setReviewSession(message.session);
+        case 'reviewSessionsUpdated':
+          console.log('Review sessions updated:', message.sessions, 'current:', message.currentSessionId);
+          setSessions(message.sessions);
+          setCurrentSessionId(message.currentSessionId);
           
-          // Auto-stop reviewInProgress if analysis is complete
-          if (message.session.status === 'completed' || message.session.status === 'failed') {
+          // If we have a current session, the review has officially started
+          if (message.currentSessionId) {
+            setReviewInProgress(true);
+            setIsStarting(false);
+          }
+
+          // Auto-stop reviewInProgress if current session is complete
+          const currentSession = message.sessions.find(s => s.dataId === message.currentSessionId);
+          if (currentSession && (currentSession.status === 'completed' || currentSession.status === 'failed' || currentSession.status === 'interrupted')) {
             setReviewInProgress(false);
           }
           break;
@@ -54,6 +61,7 @@ export default function DashboardView() {
           break;
         case 'error':
           console.error('Error from extension:', message.message);
+          setIsStarting(false);
           break;
         case 'log':
           console.log('Extension Log:', message.message);
@@ -63,10 +71,6 @@ export default function DashboardView() {
 
     return cleanup;
   }, [vscode]);
-
-  const handleSettings = () => {
-    vscode.postMessage({ type: 'openSettings' });
-  };
 
   const handleLogout = () => {
     vscode.postMessage({ type: 'logout' });
@@ -81,64 +85,107 @@ export default function DashboardView() {
     });
   };
 
-  const handleToggleFile = (filePath: string) => {
+  const handleToggleFile = (filePath: string, sessionId?: string) => {
     vscode.postMessage({
       type: 'toggleFile',
-      filePath
+      filePath,
+      sessionId
     });
   };
 
   const handleClearSession = () => {
-    // Clear session locally
-    setReviewSession(null);
+    // Clear current session (moves to previous)
+    setCurrentSessionId(null);
     setReviewInProgress(false);
     
-    // Notify extension to clear session
+    // Notify extension to archive current session
     vscode.postMessage({ type: 'clearSession' });
   };
 
+  const handleDeleteSession = (sessionId: string) => {
+    // Remove specific session
+    vscode.postMessage({ 
+      type: 'deleteSession',
+      sessionId 
+    });
+  };
+
   const handleStartReview = () => {
-    setReviewInProgress(true);
+    setIsStarting(true);
     
-    // Create optimistic session immediately (replaces old one)
-    const optimisticSession: ReviewSession = {
-      dataId: 'pending',
-      title: 'Review in Progress',
-      branch: {
-        from: branches[0]?.name || 'current',
-        to: 'base',
-      },
-      status: 'running',
-      totalComments: 0,
-      resolvedComments: 0,
-      files: files.map(file => ({
-        filePath: file.path,
-        comments: [],
-        criticalCount: 0,
-        highCount: 0,
-        issueCount: 0,
-        expanded: false,
-      })),
-      createdAt: new Date(),
-    };
+    // Use filteredFiles (only incremental changes) for the session
+    const filesToReview = filteredFiles;
     
-    // Set as the only session
-    setReviewSession(optimisticSession);
-    
-    vscode.postMessage({ type: 'triggerReview' });
+    // Send only the filtered files to review
+    vscode.postMessage({ 
+      type: 'triggerReview',
+      filePaths: filesToReview.map(f => f.path)
+    });
   };
 
   const handleStopReview = () => {
+    if (!currentSessionId) {
+      console.warn('No current session to stop');
+      return;
+    }
+
+    // Immediately update UI for better feedback
     setReviewInProgress(false);
-    // Clear the session
-    setReviewSession(null);
+
+    // Notify the extension to stop the review (backend API call)
+    vscode.postMessage({ 
+      type: 'stopReview',
+      sessionId: currentSessionId
+    });
+    
+    // UI will be further updated via the reviewSessionsUpdated message from extension
   };
 
-  const filteredFiles = reviewSession 
-    ? files.filter(file => 
-        !reviewSession.files.some(sessionFile => sessionFile.filePath === file.path)
-      )
-    : files;
+  // Progressive review: Detect incremental changes across ALL sessions
+  const getFilesWithIncrementalChanges = (): ReviewFile[] => {
+    if (sessions.length === 0) {
+      // No sessions, show all files
+      console.log('📝 No sessions - showing all', files.length, 'files');
+      return files;
+    }
+    
+    const filesWithNewChanges: ReviewFile[] = [];
+    
+    for (const currentFile of files) {
+      // Check if file content matches ANY previous session's reviewed content
+      let isNewChange = true;
+      let lastReviewedHash: string | undefined;
+      
+      // Check all sessions to see if we've reviewed this exact content before
+      for (const session of sessions) {
+        const sessionFile = session.files.find(
+          (sf: any) => sf.filePath === currentFile.path
+        );
+        
+        if (sessionFile && sessionFile.lastReviewedHash) {
+          lastReviewedHash = sessionFile.lastReviewedHash;
+          const currentHash = currentFile.contentHash || '';
+          
+          if (currentHash && currentHash === lastReviewedHash) {
+            // We found a session where we reviewed this EXACT content
+            console.log(`✅ Found match in session ${session.dataId} for ${currentFile.path}`);
+            isNewChange = false;
+            break; // No need to check other sessions, we found a match
+          }
+        }
+      }
+      
+      if (isNewChange) {
+        console.log(`✨ New/Modified content for: ${currentFile.path}`);
+        filesWithNewChanges.push(currentFile);
+      }
+    }
+    
+    console.log(`📊 Total: ${files.length} files, showing ${filesWithNewChanges.length} with changes`);
+    return filesWithNewChanges;
+  };
+
+  const filteredFiles = getFilesWithIncrementalChanges();
 
   return (
     <div className="p-4">
@@ -150,15 +197,18 @@ export default function DashboardView() {
         fileCount={filteredFiles.length} 
         disabled={!hasChanges || filteredFiles.length === 0}
         reviewInProgress={reviewInProgress}
+        isStarting={isStarting}
         onStartReview={handleStartReview}
         onStopReview={handleStopReview}
       />
-      {reviewSession && (
+      {sessions.length > 0 && (
         <ReviewSessionsList 
-          session={reviewSession}
+          sessions={sessions}
+          currentSessionId={currentSessionId}
           onFileClick={handleFileClick}
           onToggleFile={handleToggleFile}
           onClearSession={handleClearSession}
+          onDeleteSession={handleDeleteSession}
         />
       )}
       {/* {user?.subscriptionStatus === 'free' && <UpgradeSection />} */}

@@ -228,4 +228,26 @@ export class BeetleService {
       this.logger.info('Stopped polling', { dataId });
     }
   }
+
+  /**
+   * Stop a running extension analysis
+   * @param dataId - The extension_data_id to stop
+   */
+  public async stopReview(dataId: string): Promise<{ analysis_status: string; data_id: string } | null> {
+    try {
+      this.logger.info('Stopping review', { dataId });
+      const response = await this.apiClient.post<any>(`/extension/stop/${dataId}`, {});
+      
+      // Also stop polling if it's running
+      this.stopCommentPolling(dataId);
+      
+      return {
+        analysis_status: response.data.analysis_status,
+        data_id: response.data.data_id
+      };
+    } catch (error) {
+      this.logger.error('Failed to stop review', error);
+      return null;
+    }
+  }
 }
