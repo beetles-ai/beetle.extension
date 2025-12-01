@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { User } from '../types';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, LogOut } from 'lucide-react';
 
 interface AccountSectionProps {
   user: User | null;
@@ -10,9 +10,6 @@ interface AccountSectionProps {
 export default function AccountSection({ user, onLogout }: AccountSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (!user) {
-    return null;
-  }
 
   return (
     <div className="mb-4">
@@ -21,17 +18,27 @@ export default function AccountSection({ user, onLogout }: AccountSectionProps) 
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-2">
-        <span className="text-xs ">{isExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+          <span className="text-xs ">{isExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
           <span className="text-xs text-white tracking-wider">
             Account
           </span>
           <span className="px-2 py-0.5 text-[10px] border border-white/30 rounded">
-            {user.subscriptionStatus }
+            {user?.subscriptionStatus || 'Free'}
           </span>
         </div>
+        
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onLogout();
+          }}
+          className="text-xs"
+        >
+          <LogOut className='h-3 w-3' />
+        </button>
       </div>
 
-      {isExpanded && (
+      {user &&isExpanded && (
         <div className="mt-3 space-y-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-beetle-primary/20 flex items-center justify-center text-lg">
@@ -47,16 +54,6 @@ export default function AccountSection({ user, onLogout }: AccountSectionProps) 
               <div className="text-xs opacity-60">{user.email}</div>
             </div>
           </div>
-          
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onLogout();
-            }}
-            className="text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Logout
-          </button>
         </div>
       )}
     </div>

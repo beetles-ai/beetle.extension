@@ -239,15 +239,33 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   private async loadUserData(): Promise<void> {
     try {
       const user = await this.beetleService.getUserInfo();
+      
+      // If user is null or undefined, logout
+      if (!user) {
+        this.logger.warn('User data is null or undefined, triggering logout');
+        await this.authProvider.logout();
+        
+        this.sendMessage({
+          type: 'error',
+          message: 'Failed to load user data. Please login again.'
+        });
+        return;
+      }
+      
       this.sendMessage({
         type: 'userData',
         user
       });
     } catch (error) {
       this.logger.error('Failed to load user data', error);
+      
+      // Clear JWT and show login page if user fetch fails
+      this.logger.info('Clearing authentication due to failed user fetch');
+      await this.authProvider.logout();
+      
       this.sendMessage({
         type: 'error',
-        message: 'Failed to load user data'
+        message: 'Failed to load user data. Please login again.'
       });
     }
   }

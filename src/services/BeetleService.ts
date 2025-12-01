@@ -16,14 +16,9 @@ export class BeetleService {
    * Get current user information
    */
   public async getUserInfo(): Promise<User | null> {
-    try {
-      this.logger.info('Fetching user info');
-      const user = await this.apiClient.get<any>('/user');
-      return user.user;
-    } catch (error) {
-      this.logger.error('Failed to fetch user info', error);
-      return null;
-    }
+    this.logger.info('Fetching user info');
+    const response = await this.apiClient.get<any>('/user');
+    return response.user;
   }
 
   /**

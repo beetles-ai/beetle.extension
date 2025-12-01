@@ -1,5 +1,5 @@
 import { CommentData } from '../types';
-import { Check, Sparkles } from 'lucide-react';
+// import { Check, Sparkles } from 'lucide-react';
 
 interface CommentPreviewProps {
   comment: CommentData;
@@ -30,44 +30,44 @@ export default function CommentPreview({ comment, onClick }: CommentPreviewProps
     return content.substring(0, maxLength) + '...';
   };
 
-  const handleMarkResolved = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  // const handleMarkResolved = (e: React.MouseEvent) => {
+  //   e.stopPropagation();
     
-    // Send message to extension to mark comment as resolved
-    // @ts-ignore
-    window.vscode?.postMessage({
-      type: 'markCommentResolved',
-      commentId: comment.id,
-      filePath: comment.file_path,
-      lineStart: comment.line_start
-    });
-  };
+  //   // Send message to extension to mark comment as resolved
+  //   // @ts-ignore
+  //   window.vscode?.postMessage({
+  //     type: 'markCommentResolved',
+  //     commentId: comment.id,
+  //     filePath: comment.file_path,
+  //     lineStart: comment.line_start
+  //   });
+  // };
 
-  const handleFixWithAI = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  // const handleFixWithAI = (e: React.MouseEvent) => {
+  //   e.stopPropagation();
     
-    // Extract the "Prompt for AI" section from comment content
-    const promptMatch = comment.content.match(/\*\*Prompt for AI\*\*\s*([\s\S]*?)(?:\n\n##|\n\n\*\*|$)/);
+  //   // Extract the "Prompt for AI" section from comment content
+  //   const promptMatch = comment.content.match(/\*\*Prompt for AI\*\*\s*([\s\S]*?)(?:\n\n##|\n\n\*\*|$)/);
     
-    if (!promptMatch || !promptMatch[1]) {
-      console.warn('No AI prompt found in comment');
-      // @ts-ignore
-      window.vscode?.postMessage({
-        type: 'showWarning',
-        message: 'No AI prompt found in comment'
-      });
-      return;
-    }
+  //   if (!promptMatch || !promptMatch[1]) {
+  //     console.warn('No AI prompt found in comment');
+  //     // @ts-ignore
+  //     window.vscode?.postMessage({
+  //       type: 'showWarning',
+  //       message: 'No AI prompt found in comment'
+  //     });
+  //     return;
+  //   }
     
-    const aiPrompt = promptMatch[1].trim();
+  //   const aiPrompt = promptMatch[1].trim();
     
-    // Send message to extension to copy to clipboard
-    // @ts-ignore
-    window.vscode?.postMessage({
-      type: 'copyToClipboard',
-      text: aiPrompt
-    });
-  };
+  //   // Send message to extension to copy to clipboard
+  //   // @ts-ignore
+  //   window.vscode?.postMessage({
+  //     type: 'copyToClipboard',
+  //     text: aiPrompt
+  //   });
+  // };
 
   return (
     <div
