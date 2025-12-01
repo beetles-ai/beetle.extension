@@ -1,187 +1,46 @@
-# Beetle VS Code Extension
+# Beetle: AI Code Reviewer That Thinks Like Humans
 
-**AI Code Reviewer That Thinks Like Humans**
+Modern AI speeds up coding 100x. But waiting days for PR reviews slows everything down. Beetle brings intelligent code analysis directly to VS Code, Cursor, and Windsurf – finding issues while you code, before anything gets committed.
 
-## Overview
+## ✨ Why Beetle
 
-Beetle is a VS Code extension that brings AI-powered code review directly into your IDE. Get instant feedback on your code with full codebase context, catch bugs, and receive actionable suggestions.
+- **Instant IDE reviews**: No waiting for PR reviews. Get feedback on uncommitted changes as you code.
+- **Seamless AI agent integration**: One-click hand-off to Claude Code, Copilot, Cursor, or any coding agent to apply fixes.
+- **Production-grade analysis**: Catches race conditions, security holes, and architectural issues – not just syntax errors.
+- **AI-powered fixes**: Review with Beetle and pass to your coding agent in the same IDE, in one single click.
+- **Complete codebase context**: Connect your repository to access contextual analysis from your entire codebase.
+- **Universal language support**: Works with every programming language your team uses.
 
-## Features
+## 🚀 Key Features
 
-- 🔐 **Secure Authentication** - OAuth flow with Beetle account
-- 🪲 **AI Code Review** - Smart analysis with human-like insights
-- 📊 **Repository Integration** - Connect your GitHub repositories
-- 🎯 **Context-Aware** - Full codebase understanding
-- ⚡ **Real-time Feedback** - Instant code suggestions
+- **Comprehensive line-by-line analysis**: Every line gets reviewed with context from your entire codebase.
+- **Pre-commit issue detection**: Catch issues before committing. Reduce PR comment noise by 80%.
+- **Intelligent fix suggestions**: Apply simple fixes instantly. Complex fixes hand off to your AI agent.
+- **Adaptive to your standards**: Automatically detects and applies your team's coding standards.
+- **Live feedback loop**: Get instant feedback as you code, not days later.
+- **Complete review history**: Review and track all your past code reviews and their outcomes.
+- **Smart change detection**: Automatically detects only new changes for efficient reviewing.
 
-## Installation
+## 🏁 Getting Started
 
-1. Install the extension from the VS Code Marketplace (coming soon)
-2. Or run locally for development:
-   ```bash
-   # Install dependencies
-   pnpm install
-   
-   # Or if you have axios already added
-   npm install axios
-   
-   # Compile the extension
-   pnpm run compile
-   
-   # Press F5 to launch Extension Development Host
-   ```
+1. **Install the extension** from the Marketplace
+2. **Connect your Beetle account** - Click the Beetle icon in the Activity Bar and sign in
+3. **Start reviewing** - Click "Review all changes" to get instant AI-powered feedback
+4. **Fix issues** - Use one-click handoff to your favorite AI coding agent to apply fixes
 
-## Usage
 
-### Step 1: Open Beetle Sidebar
-Click the Beetle 🪲 icon in the Activity Bar (left sidebar).
+## 🔐 Security and Support
 
-### Step 2: Sign In
-1. Click "Logging in..." button
-2. Your browser will open to `https://beetleai.dev/signin`
-3. Complete authentication in the browser
-4. You'll be redirected back to VS Code automatically
+### Security
 
-### Step 3: Select Repository & Branch
-- Choose your repository from the dropdown
-- Select the branch you want to review
-- View files pending review
+Beetle is **SOC 2 Compliant**. Your code is analyzed in memory and never stored. All transmissions are encrypted.
 
-### Step 4: Trigger Review
-Click "Review all changes" to start the AI code review process.
+For more information about our security practices, visit: [beetleai.dev/security](https://beetleai.dev/security)
 
-## Authentication Flow
+### Support
 
-The extension uses OAuth with a custom URI handler:
-
-1. **User clicks login** → Opens browser to Beetle signin page
-2. **User authenticates** → Logs in on beetleai.dev
-3. **Backend redirects** → `vscode://beetle.beetle/auth-callback?token=<ACCESS_TOKEN>`
-4. **Extension receives token** → Stored securely in VS Code SecretStorage
-5. **UI updates** → Shows logged-in dashboard
-
-## Project Structure
-
-```
-beetle.extension/
-├── src/
-│   ├── authentication/          # OAuth and token management
-│   │   ├── AuthenticationProvider.ts
-│   │   └── types.ts
-│   ├── services/                # API integration
-│   │   ├── ApiClient.ts
-│   │   └── BeetleService.ts
-│   ├── views/                   # UI components
-│   │   ├── BeetleViewProvider.ts
-│   │   └── webview/
-│   │       ├── login.html
-│   │       ├── main.html
-│   │       └── styles.css
-│   ├── utils/                   # Utilities
-│   │   ├── logger.ts
-│   │   └── constants.ts
-│   ├── types/                   # TypeScript definitions
-│   │   └── index.ts
-│   └── extension.ts             # Entry point
-├── media/                       # Icons and assets
-│   └── beetle-icon.svg
-├── package.json
-└── tsconfig.json
-```
-
-## Development
-
-### Prerequisites
-- Node.js 22.x or higher
-- pnpm (or npm)
-- VS Code 1.106.1 or higher
-
-### Setup
-```bash
-# Clone the repository
-cd beetle.extension
-
-# Install dependencies
-pnpm install
-
-# Compile TypeScript
-pnpm run compile
-
-# Watch mode (auto-recompile on changes)
-pnpm run watch
-```
-
-### Testing Locally
-1. Press `F5` in VS Code to launch Extension Development Host
-2. The Beetle icon will appear in the Activity Bar
-3. Click to open the sidebar panel
-4. Test authentication flow (see below)
-
-### Testing Authentication Without Backend
-For development/testing without the full backend:
-
-1. Open Command Palette (`Cmd+Shift+P`)
-2. Run: `> Open URI...`
-3. Enter: `vscode://beetle.beetle/auth-callback?token=test_token_123`
-4. The extension will store the token and switch to logged-in UI
-
-## API Integration
-
-The extension expects the following API endpoints:
-
-- `GET /api/user/me` - Get current user info
-- `GET /api/repositories` - List user repositories  
-- `GET /api/repositories/:id/branches` - Get branches for a repo
-- `GET /api/reviews/pending` - Get files pending review
-- `POST /api/reviews/trigger` - Trigger a code review
-
-All requests include `Authorization: Bearer <token>` header.
-
-## Configuration
-
-Currently, the extension uses hardcoded values in `src/utils/constants.ts`:
-
-```typescript
-BEETLE_API_BASE_URL = 'https://beetleai.dev/api'
-BEETLE_SIGNIN_URL = 'https://beetleai.dev/signin'
-```
-
-Future: These will be configurable via VS Code settings.
-
-## Security
-
-- Access tokens are stored in VS Code's **SecretStorage** (encrypted)
-- All API requests use HTTPS
-- OAuth callback uses custom URI scheme (`vscode://`)
-- No sensitive data in logs or console
-
-## Troubleshooting
-
-### Extension not activating
-- Check the Output panel (`View > Output > Beetle`)
-- Look for activation errors
-
-### Login redirect not working
-- Ensure the backend redirects to: `vscode://beetle.beetle/auth-callback?token=<TOKEN>`
-- Check URI handler is registered (should auto-register on activation)
-
-### Sidebar not showing
-- Click the Beetle icon in the Activity Bar (left side)
-- If icon missing, check `media/beetle-icon.svg` exists
-
-### API errors
-- Check network connectivity
-- Verify API base URL in constants
-- Check Output panel for detailed error logs
-
-## Contributing
-
-This is an internal Beetle project. For issues or feature requests, contact the team.
-
-## License
-
-Proprietary - Beetle AI © 2024
+**For any issues or questions:**
+- Email: [shivang@beetleai.dev](mailto:shivang@beetleai.dev)
+- Report bugs: [Create an issue on GitHub](https://github.com/beetles-ai/report-a-bug/issues/new)
 
 ---
-
-**Built with ❤️ by the Beetle team**

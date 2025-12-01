@@ -1,101 +1,109 @@
 {
-  "name": "beetle",
-  "displayName": "Beetle",
-  "description": "AI Code Reviewer That Thinks Like Humans",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.104.0"
-  },
-  "publisher": "beetle",
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "beetle-sidebar",
-          "title": "Beetle",
-          "icon": "media/beetle-icon.svg"
-        }
-      ]
+    "name": "beetle",
+    "displayName": "Beetle",
+    "description": "AI Code Reviewer That Thinks Like Humans",
+    "version": "0.0.4",
+    "engines": {
+    "vscode": "^1.80.0"
     },
-    "views": {
-      "beetle-sidebar": [
-        {
-          "type": "webview",
-          "id": "beetle.mainView",
-          "name": "Beetle AI"
-        }
-      ]
+    "publisher": "Beetle",
+    "icon": "media/beetle.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/beetles-ai/beetle.extension"
     },
-    "commands": [
-      {
-        "command": "beetle.test",
-        "title": "Beetle: Test Extension"
-      },
-      {
-        "command": "beetle.markCommentResolved",
-        "title": "Mark Resolved",
-        "icon": "$(check)"
-      },
-      {
-        "command": "beetle.fixWithAI",
-        "title": "Fix with AI",
-        "icon": "$(sparkle)"
-      }
+    "homepage": "https://beetleai.dev",
+    "bugs": {
+        "url": "https://github.com/beetles-ai/report-a-bug/issues"
+    },
+    "categories": ["Linters", "Machine Learning", "Other"],
+    "activationEvents": [
+        "onStartupFinished"
     ],
-    "menus": {
-      "comments/commentThread/title": [
-        {
-          "command": "beetle.markCommentResolved",
-          "group": "inline",
-          "when": "commentController == beetle-review"
+    "main": "./dist/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "beetle-sidebar",
+                    "title": "Beetle",
+                    "icon": "media/beetle-icon.svg"
+                }
+            ]
         },
-        {
-          "command": "beetle.fixWithAI",
-          "group": "inline",
-          "when": "commentController == beetle-review"
+        "views": {
+            "beetle-sidebar": [
+                {
+                    "type": "webview",
+                    "id": "beetle.mainView",
+                    "name": "Beetle AI"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "beetle.test",
+                "title": "Beetle: Test Extension"
+            },
+            {
+                "command": "beetle.markCommentResolved",
+                "title": "Mark Resolved",
+                "icon": "$(check)"
+            },
+            {
+                "command": "beetle.fixWithAI",
+                "title": "Fix with AI",
+                "icon": "$(sparkle)"
+            }
+        ],
+        "menus": {
+            "comments/commentThread/title": [
+                {
+                    "command": "beetle.markCommentResolved",
+                    "group": "inline",
+                    "when": "commentController == beetle-review"
+                },
+                {
+                    "command": "beetle.fixWithAI",
+                    "group": "inline",
+                    "when": "commentController == beetle-review"
+                }
+            ]
         }
-      ]
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "pnpm run package",
-    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
-    "watch:webview": "cd src/views/webview-ui && pnpm run watch",
-    "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production && pnpm run build:webview",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
-    "check-types": "tsc --noEmit",
-    "lint": "eslint src",
-    "test": "vscode-test",
-    "build:webview": "cd src/views/webview-ui && pnpm run build",
-    "dev:webview": "cd src/views/webview-ui && pnpm run dev"
-  },
-  "dependencies": {
-    "axios": "^1.13.2",
-    "react-markdown": "^10.1.0"
-  },
-  "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "@types/vscode": "^1.104.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.7.1",
-    "esbuild": "^0.27.0",
-    "eslint": "^9.39.1",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.3"
-  }
+    },
+    "scripts": {
+        "vscode:prepublish": "pnpm run package",
+        "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+        "watch": "npm-run-all -p watch:*",
+        "watch:webview": "cd src/views/webview-ui && pnpm run watch",
+        "watch:esbuild": "node esbuild.js --watch",
+        "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+        "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production && pnpm run build:webview",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+        "check-types": "tsc --noEmit",
+        "lint": "eslint src",
+        "test": "vscode-test",
+        "build:webview": "cd src/views/webview-ui && pnpm run build",
+        "dev:webview": "cd src/views/webview-ui && pnpm run dev"
+    },
+    "dependencies": {
+        "axios": "^1.13.2",
+        "react-markdown": "^10.1.0"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "22.x",
+        "@types/vscode": "^1.80.0",
+        "@vscode/test-cli": "^0.0.12",
+        "@vscode/test-electron": "^2.5.2",
+        "@vscode/vsce": "^3.7.1",
+        "esbuild": "^0.27.0",
+        "eslint": "^9.39.1",
+        "npm-run-all": "^4.1.5",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.46.3"
+    },
+    "license": "MIT"
 }
