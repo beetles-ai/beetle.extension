@@ -1,6 +1,7 @@
 import { ApiClient } from './ApiClient';
 import { Logger } from '../utils/logger';
 import { User, Repository, Branch, ReviewFile } from '../types';
+import { gzipSync } from 'zlib';
 
 export class BeetleService {
   private apiClient: ApiClient;
@@ -115,13 +116,12 @@ export class BeetleService {
    */
   private compressChangeFields(change: any): any {
     try {
-      const { gzipSync } = require('zlib');
       const compressed: any = { ...change };
       let totalOriginalSize = 0;
       let totalCompressedSize = 0;
       
       // Compress patch if it exists and is large (> 1KB)
-      if (change.patch && change.patch.length > 1024) {
+      if (change.patch && Buffer.byteLength(change.patch, 'utf-8') > 1024) {
         const originalSize = Buffer.byteLength(change.patch, 'utf-8');
         const gzipped = gzipSync(change.patch);
         compressed.patch_compressed = gzipped.toString('base64');
@@ -133,7 +133,7 @@ export class BeetleService {
       }
       
       // Compress content if it exists and is large (> 1KB)
-      if (change.content && change.content.length > 1024) {
+      if (change.content && Buffer.byteLength(change.content, 'utf-8') > 1024) {
         const originalSize = Buffer.byteLength(change.content, 'utf-8');
         const gzipped = gzipSync(change.content);
         compressed.content_compressed = gzipped.toString('base64');
