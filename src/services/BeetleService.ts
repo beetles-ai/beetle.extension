@@ -1,6 +1,7 @@
 import { ApiClient } from './ApiClient';
 import { Logger } from '../utils/logger';
 import { User, Repository, Branch, ReviewFile } from '../types';
+import { gzipSync } from 'zlib';
 
 export class BeetleService {
   private apiClient: ApiClient;
@@ -16,14 +17,9 @@ export class BeetleService {
    * Get current user information
    */
   public async getUserInfo(): Promise<User | null> {
-    try {
-      this.logger.info('Fetching user info');
-      const user = await this.apiClient.get<any>('/user');
-      return user.user;
-    } catch (error) {
-      this.logger.error('Failed to fetch user info', error);
-      return null;
-    }
+    this.logger.info('Fetching user info');
+    const response = await this.apiClient.get<any>('/user');
+    return response.user;
   }
 
   /**
@@ -75,18 +71,90 @@ export class BeetleService {
 
   /**
    * Trigger a code review for all changes
+   * Uses selective field compression for large patches/content
    */
   public async triggerReview(data: any): Promise<{ dataId: string; comments: any[] } | null> {
     try {
       this.logger.info('Triggering review', { repo: data.repository.name });
-      const response = await this.apiClient.post<any>('/extension/review', data);
+      
+      // Compress large fields in each file change
+      // Note: data.changes is an object with { summary, commits, files, fullDiff }
+      const compressedData = {
+        ...data,
+        changes: {
+          ...data.changes,
+          files: data.changes.files.map((change: any) => this.compressChangeFields(change))
+        }
+      };
+      
+      this.logger.info('Sending request to API...');
+      const response = await this.apiClient.post<any>('/extension/review', compressedData);
+      
+      this.logger.info('Received response from API', { 
+        hasDataId: !!response.extension_data_id,
+        dataId: response.extension_data_id 
+      });
+      
       return {
         dataId: response.extension_data_id,
         comments: response.comments || []
       };
-    } catch (error) {
-      this.logger.error('Failed to trigger review', error);
+    } catch (error: any) {
+      this.logger.error('Failed to trigger review', {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
       return null;
+    }
+  }
+
+  /**
+   * Compress large fields in a change object
+   * Only compresses fields > 1KB to reduce payload size
+   */
+  private compressChangeFields(change: any): any {
+    try {
+      const compressed: any = { ...change };
+      let totalOriginalSize = 0;
+      let totalCompressedSize = 0;
+      
+      // Compress patch if it exists and is large (> 1KB)
+      if (change.patch && Buffer.byteLength(change.patch, 'utf-8') > 1024) {
+        const originalSize = Buffer.byteLength(change.patch, 'utf-8');
+        const gzipped = gzipSync(change.patch);
+        compressed.patch_compressed = gzipped.toString('base64');
+        delete compressed.patch;
+        compressed._compressed = true;
+        
+        totalOriginalSize += originalSize;
+        totalCompressedSize += gzipped.length;
+      }
+      
+      // Compress content if it exists and is large (> 1KB)
+      if (change.content && Buffer.byteLength(change.content, 'utf-8') > 1024) {
+        const originalSize = Buffer.byteLength(change.content, 'utf-8');
+        const gzipped = gzipSync(change.content);
+        compressed.content_compressed = gzipped.toString('base64');
+        delete compressed.content;
+        compressed._compressed = true;
+        
+        totalOriginalSize += originalSize;
+        totalCompressedSize += gzipped.length;
+      }
+      
+      // Log compression metrics if anything was compressed
+      if (compressed._compressed) {
+        const ratio = ((1 - totalCompressedSize / totalOriginalSize) * 100).toFixed(1);
+        this.logger.info(`Compressed fields in ${change.filename}: ${(totalOriginalSize / 1024).toFixed(1)}KB → ${(totalCompressedSize / 1024).toFixed(1)}KB (${ratio}% reduction)`);
+      }
+      
+      return compressed;
+    } catch (error: any) {
+      this.logger.error(`Failed to compress fields for ${change.filename}`, error);
+      // Return original change if compression fails
+      return change;
     }
   }
 
