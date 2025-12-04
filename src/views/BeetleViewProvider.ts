@@ -295,7 +295,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       // Reset session counter
       resetSessionCounter();
       
-      // Persist the cleared session (removes from globalState)
+      // Persist the cleared session (removes from workspaceState)
       this.saveCachedSessions();
       
       // Notify UI that session is cleared
@@ -1618,11 +1618,11 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    */
   private saveCachedSessions(): void {
     if (this.sessions.length > 0) {
-      this.context.globalState.update('beetleSessions', this.sessions);
-      this.logger.info(`💾 Saved ${this.sessions.length} session(s) to cache`);
+      this.context.workspaceState.update('beetleSessions', this.sessions);
+      this.logger.info(`💾 Saved ${this.sessions.length} session(s) to workspace cache`);
     } else {
-      this.context.globalState.update('beetleSessions', null);
-      this.logger.info(`💾 Cleared cached sessions`);
+      this.context.workspaceState.update('beetleSessions', null);
+      this.logger.info(`💾 Cleared cached sessions from workspace`);
     }
   }
   
@@ -1630,7 +1630,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    * Restore session from extension storage and recreate inline comments
    */
   private restoreCachedSessions(): void {
-    const savedSessions = this.context.globalState.get<any[] | null>('beetleSessions', null);
+    const savedSessions = this.context.workspaceState.get<any[] | null>('beetleSessions', null);
     
     if (savedSessions && savedSessions.length > 0) {
       this.logger.info(`📂 Restoring ${savedSessions.length} cached session(s)`);
