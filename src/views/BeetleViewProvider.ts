@@ -39,7 +39,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
   
   // Track staged files count for notification
   private previousStagedCount: number = 0;
-  private gitListenerAttached: boolean = false;
+  private attachedRepoListeners: Set<string> = new Set();
 
   constructor(
     context: vscode.ExtensionContext,
@@ -1049,14 +1049,15 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       if (git.repositories.length > 0) {
         this.logger.info('Found initial repositories', { count: git.repositories.length });
         const repo = git.repositories[0];
+        const repoPath = repo.rootUri.fsPath;
         
         // Initialize staged count
         this.previousStagedCount = repo.state.indexChanges.length;
         
-        // Attach state change listener to initial repo (only once)
-        if (!this.gitListenerAttached) {
+        // Attach state change listener to initial repo (only once per repo)
+        if (!this.attachedRepoListeners.has(repoPath)) {
           this.attachRepoStateListener(repo);
-          this.gitListenerAttached = true;
+          this.attachedRepoListeners.add(repoPath);
         }
         
         await this.updateRepoInfo(repo);
@@ -1065,18 +1066,19 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
         this.sendMessage({ type: 'log', message: 'No initial repositories found, waiting for open...' });
       }
 
-      // Listen for newly opened repos (only attach if not already attached)
+      // Listen for newly opened repos
       git.onDidOpenRepository((repo) => {
-        this.logger.info('Repository opened', { root: repo.rootUri.fsPath });
-        this.sendMessage({ type: 'log', message: `Repository opened: ${repo.rootUri.fsPath}` });
+        const repoPath = repo.rootUri.fsPath;
+        this.logger.info('Repository opened', { root: repoPath });
+        this.sendMessage({ type: 'log', message: `Repository opened: ${repoPath}` });
         
         // Initialize staged count for new repo
         this.previousStagedCount = repo.state.indexChanges.length;
         
-        // Attach state change listener only if not already attached
-        if (!this.gitListenerAttached) {
+        // Attach state change listener only if not already attached for this repo
+        if (!this.attachedRepoListeners.has(repoPath)) {
           this.attachRepoStateListener(repo);
-          this.gitListenerAttached = true;
+          this.attachedRepoListeners.add(repoPath);
         }
         
         this.updateRepoInfo(repo);
