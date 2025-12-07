@@ -2,7 +2,7 @@
     "name": "beetle",
     "displayName": "Beetle",
     "description": "AI Code Reviewer That Thinks Like Humans",
-    "version": "0.0.6",
+    "version": "0.0.8",
     "engines": {
     "vscode": "^1.80.0"
     },

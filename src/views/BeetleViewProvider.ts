@@ -36,6 +36,10 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     commit: string;
     filesHash: string;
   } | null = null;
+  
+  // Track staged files count for notification
+  private previousStagedCount: number = 0;
+  private gitListenerAttached: boolean = false;
 
   constructor(
     context: vscode.ExtensionContext,
@@ -76,6 +80,9 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
     this.context.subscriptions.push(
       vscode.workspace.registerTextDocumentContentProvider('beetle-original', this as any)
     );
+    
+    // Initialize Git integration immediately (for staging detection even when panel is closed)
+    this.initializeGit();
   }
 
   public resolveWebviewView(
@@ -103,9 +110,6 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       undefined,
       this.context.subscriptions
     );
-
-    // Initialize Git integration
-    this.initializeGit();
 
     // Restore cached review sessions and send auth state
     (async () => {
@@ -1044,31 +1048,76 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       // Handle initial repositories
       if (git.repositories.length > 0) {
         this.logger.info('Found initial repositories', { count: git.repositories.length });
-        await this.updateRepoInfo(git.repositories[0]);
+        const repo = git.repositories[0];
+        
+        // Initialize staged count
+        this.previousStagedCount = repo.state.indexChanges.length;
+        
+        // Attach state change listener to initial repo (only once)
+        if (!this.gitListenerAttached) {
+          this.attachRepoStateListener(repo);
+          this.gitListenerAttached = true;
+        }
+        
+        await this.updateRepoInfo(repo);
       } else {
         this.logger.info('No initial repositories found, waiting for open...');
         this.sendMessage({ type: 'log', message: 'No initial repositories found, waiting for open...' });
-        
-        // Wait for repo to be opened
-        git.onDidOpenRepository(async (repo) => {
-          this.logger.info('Repository opened', { root: repo.rootUri.fsPath });
-          this.sendMessage({ type: 'log', message: `Repository opened: ${repo.rootUri.fsPath}` });
-          await this.updateRepoInfo(repo);
-        });
       }
 
-      // Listen for repo changes
+      // Listen for newly opened repos (only attach if not already attached)
       git.onDidOpenRepository((repo) => {
-        repo.state.onDidChange(async () => {
-          this.logger.info('Repository state changed');
-          await this.updateRepoInfo(repo);
-        });
+        this.logger.info('Repository opened', { root: repo.rootUri.fsPath });
+        this.sendMessage({ type: 'log', message: `Repository opened: ${repo.rootUri.fsPath}` });
+        
+        // Initialize staged count for new repo
+        this.previousStagedCount = repo.state.indexChanges.length;
+        
+        // Attach state change listener only if not already attached
+        if (!this.gitListenerAttached) {
+          this.attachRepoStateListener(repo);
+          this.gitListenerAttached = true;
+        }
+        
+        this.updateRepoInfo(repo);
       });
 
     } catch (error) {
       this.logger.error('Failed to initialize Git', error);
       this.sendMessage({ type: 'error', message: `Failed to initialize Git: ${error}` });
     }
+  }
+
+  /**
+   * Attach state change listener to a repository for staging detection
+   */
+  private attachRepoStateListener(repo: GitRepository): void {
+    repo.state.onDidChange(async () => {
+      this.logger.info('Repository state changed');
+      
+      // Check if new files were staged
+      const currentStagedCount = repo.state.indexChanges.length;
+      
+      if (currentStagedCount > this.previousStagedCount && currentStagedCount > 0) {
+        this.logger.info(`New files staged: ${currentStagedCount - this.previousStagedCount}`);
+        
+        // Show notification popup
+        const action = await vscode.window.showInformationMessage(
+          'You have staged changes! Run a review with Beetle.',
+          'Start Review all changes'
+        );
+        
+        if (action === 'Start Review all changes') {
+          // Focus and reveal the Beetle panel
+          vscode.commands.executeCommand(`${VIEW_ID_MAIN}.focus`);
+          // Trigger review
+          this.handleTriggerReview();
+        }
+      }
+      
+      this.previousStagedCount = currentStagedCount;
+      await this.updateRepoInfo(repo);
+    });
   }
 
   /**
