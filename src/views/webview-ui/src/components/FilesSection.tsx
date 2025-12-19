@@ -82,8 +82,8 @@ export default function FilesSection({
         className="flex items-center gap-2 cursor-pointer py-1"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span className="text-xs ">{isExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
-          <span className="text-xs text-white tracking-wider">
+        <span className="text-xs text-text-primary">{isExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+          <span className="text-xs text-text-primary tracking-wider">
           Files To Review ({fileCount})
         </span>
       </div>
@@ -93,7 +93,7 @@ export default function FilesSection({
           {/* Files List */}
           <div className="my-3 space-y-1">
             {files.length === 0 ? (
-              <div className="opacity-50 text-sm text-center py-4">No files to review</div>
+              <div className="text-text-secondary text-sm text-center py-4">No files to review</div>
             ) : (
               files.map((file, index) => (
                 <div
@@ -102,8 +102,8 @@ export default function FilesSection({
                   className="flex items-center justify-between p-1 hover:bg-vscode-list-hover cursor-pointer rounded transition-colors"
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-xs opacity-60"><File className='h-3 w-3'/></span>
-                    <span className="text-xs truncate">{file.path}</span>
+                    <span className="text-xs text-text-secondary"><File className='h-3 w-3'/></span>
+                    <span className="text-xs text-text-primary truncate">{file.path}</span>
                     
                     {/* Incremental change indicator */}
                     {/* {file.isIncremental && (
@@ -128,7 +128,7 @@ export default function FilesSection({
           {reviewInProgress ? (
             <button
               onClick={handleStopReview}
-              className="w-full mt-4 py-1 rounded transition-all font-medium text-sm bg-neutral-700 text-white cursor-pointer"
+              className="w-full mt-4 py-1 rounded-sm transition-all font-medium text-sm bg-vscode-input-bg text-text-primary cursor-pointer hover:opacity-80"
             >
               Stop Review
             </button>
@@ -136,10 +136,10 @@ export default function FilesSection({
             <button
               onClick={handleReview}
               disabled={disabled || isStarting}
-              className={`w-full mt-4 py-1 rounded transition-all font-medium text-sm ${
+              className={`w-full mt-4 py-1 rounded-sm transition-all font-medium text-sm ${
                 disabled || isStarting
-                  ? 'bg-beetle-primary/30 text-white/50 cursor-not-allowed'
-                  : 'bg-beetle-primary hover:bg-beetle-primary-dark text-black cursor-pointer'
+                  ? 'bg-vscode-input-bg text-text-muted cursor-not-allowed'
+                  : 'bg-beetle-primary hover:bg-beetle-primary-dark text-beetle-primary-fg cursor-pointer'
               }`}
             >
               {isStarting ? 'Starting...' : 'Review all changes'}

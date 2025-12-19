@@ -14,7 +14,7 @@ export default function RepositorySection({ repository }: RepositorySectionProps
 
   return (
     <div className="mb-5 pb-4 border-b border-vscode-border">
-          <div className="text-xs text-white tracking-wider">
+          <div className="text-xs text-text-primary tracking-wider">
         Repository
       </div>
       <div

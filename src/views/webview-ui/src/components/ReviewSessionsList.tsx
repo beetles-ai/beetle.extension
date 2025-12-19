@@ -32,11 +32,11 @@ export default function ReviewSessionsList({
         <>
           <div className="text-xs font-semibold mb-3 tracking-wider flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <ScanSearch className='h-3 w-3 inline-block' /> REVIEW
+              <ScanSearch className='h-3 w-3 inline-block text-text-primary' /> <span className="text-text-primary">REVIEW</span>
             </div>
             <button
               onClick={onClearSession}
-              className="p-1 hover:bg-vscode-list-hover rounded transition-colors"
+              className="p-1 text-text-primary hover:bg-vscode-list-hover rounded transition-colors"
               title="Clear session"
             >
               <Trash2 className="h-3 w-3" />
@@ -60,8 +60,8 @@ export default function ReviewSessionsList({
             className="flex items-center gap-2 cursor-pointer py-1 text-xs font-semibold tracking-wider"
             onClick={() => setPreviousExpanded(!previousExpanded)}
           >
-            <span>{previousExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
-            <span className='font-semibold'>PREVIOUS REVIEWS</span>
+            <span className="text-text-primary">{previousExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+            <span className='font-semibold text-text-primary'>PREVIOUS REVIEWS</span>
             <span className="ml-1 px-1.5 py-0.5 bg-vscode-input-bg rounded text-[10px]">
               {previousSessions.length}
             </span>

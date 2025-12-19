@@ -14,6 +14,26 @@ import { generateSessionName, resetSessionCounter } from '../utils/sessionNames'
 
 const exec = util.promisify(cp.exec);
 
+// File extensions to exclude from review analysis
+const EXCLUDED_EXTENSIONS = [
+  // Images
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.bmp', '.tiff', '.tif',
+  // Videos
+  '.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v',
+  // Audio
+  '.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a',
+  // Documents & Archives
+  '.pdf', '.zip', '.tar', '.gz', '.rar', '.7z',
+  // Markdown & Documentation (unnecessary for code analysis)
+  '.md', '.mdx', '.markdown',
+  // Fonts
+  '.ttf', '.otf', '.woff', '.woff2', '.eot',
+  // Other binary/data files
+  '.sqlite', '.db', '.lock', '.bin', '.exe', '.dll', '.so', '.dylib',
+  // Design files
+  '.psd', '.ai', '.sketch', '.fig', '.xd'
+];
+
 export class BeetleViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private context: vscode.ExtensionContext;
@@ -627,12 +647,13 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
             };
           }));
 
-          // Remove nulls (files with no changes) and duplicates
+          // Remove nulls (files with no changes), duplicates, and excluded file types
           let uniqueFilesData = filesData
             .filter((f): f is NonNullable<typeof f> => f !== null)
             .filter((f, index, self) => 
               index === self.findIndex((ff) => ff.filename === f.filename)
-            );
+            )
+            .filter(f => !this.shouldExcludeFile(f.filename));
           
           // INCREMENTAL: Filter to only specified files if provided
           if (filePaths && filePaths.length > 0) {
@@ -1223,7 +1244,9 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       }));
 
       // Remove duplicates (file could be in both index and working tree)
-      const uniqueFiles = Array.from(new Map(reviewFiles.map(f => [f.path, f])).values());
+      // Also filter out excluded file types (images, videos, markdown, etc.)
+      const uniqueFiles = Array.from(new Map(reviewFiles.map(f => [f.path, f])).values())
+        .filter(f => !this.shouldExcludeFile(f.path));
 
       this.sendMessage({
         type: 'reviewFilesData',
@@ -1868,6 +1891,14 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
       default:
         return 'modified';
     }
+  }
+
+  /**
+   * Check if a file should be excluded from review based on its extension
+   */
+  private shouldExcludeFile(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase();
+    return EXCLUDED_EXTENSIONS.includes(ext);
   }
 
   /**
