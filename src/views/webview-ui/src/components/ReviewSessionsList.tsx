@@ -30,9 +30,9 @@ export default function ReviewSessionsList({
       {/* Current Review Section */}
       {currentSession && (
         <>
-          <div className="text-xs font-semibold mb-3 tracking-wider flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <ScanSearch className='h-3 w-3 inline-block' /> REVIEW
+          <div className="text-xs font-semibold mb-3 text-text-primary tracking-wider flex items-center justify-between">
+            <div className="flex items-center gap-1 ">
+              <ScanSearch className='h-3 w-3 inline-block ' /> <span>REVIEW</span>
             </div>
             <button
               onClick={onClearSession}
@@ -60,8 +60,8 @@ export default function ReviewSessionsList({
             className="flex items-center gap-2 cursor-pointer py-1 text-xs font-semibold tracking-wider"
             onClick={() => setPreviousExpanded(!previousExpanded)}
           >
-            <span>{previousExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
-            <span className='font-semibold'>PREVIOUS REVIEWS</span>
+            <span className="text-text-primary">{previousExpanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+            <span className='font-semibold text-text-primary'>PREVIOUS REVIEWS</span>
             <span className="ml-1 px-1.5 py-0.5 bg-vscode-input-bg rounded text-[10px]">
               {previousSessions.length}
             </span>

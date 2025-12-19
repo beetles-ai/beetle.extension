@@ -77,11 +77,11 @@ export default function CommentPreview({ comment, onClick }: CommentPreviewProps
       <div className="flex items-start gap-1">
         <div className="flex-1 min-w-0">
           <div className="flex flex-col items-start gap-1 m-1">
-            <p className="text-[8px] opacity-50">
+            <p className="text-[8px] text-text-muted">
               Line {comment.line_start}
               {comment.line_end !== comment.line_start && `-${comment.line_end}`}
             </p>
-            <p className={`text-xs leading-relaxed ${comment.resolved ? 'line-through' : ''}`}>
+            <p className={`text-xs leading-relaxed text-text-primary ${comment.resolved ? 'line-through' : ''}`}>
               {comment.resolved && '✓ '}
               {truncateContent(comment?.title ?? 'Issue')}
             </p>

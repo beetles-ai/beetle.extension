@@ -41,8 +41,8 @@ export default function ReviewSessionItem({
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2 flex-1">
-          <span className="text-xs">{expanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
-          <span className="font-medium text-xs">{session.title}</span>
+          <span className="text-xs text-text-primary">{expanded ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}</span>
+          <span className="font-medium text-xs text-text-primary">{session.title}</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ export default function ReviewSessionItem({
           {showDelete && onDelete && (
             <button
               onClick={handleDelete}
-              className="p-1 hover:bg-vscode-list-hover rounded transition-all opacity-0 group-hover:opacity-100"
+              className="p-1 text-text-primary hover:bg-vscode-list-hover rounded transition-all opacity-0 group-hover:opacity-100"
               title="Delete this review"
             >
               <Trash2 className="h-3 w-3" />
@@ -78,7 +78,7 @@ export default function ReviewSessionItem({
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <div className="text-xs opacity-60 mt-2 mb-4">
+            <div className="text-xs text-text-secondary mt-2 mb-4">
               {session.resolvedComments} of {session.totalComments} issues resolved
             </div>
           </div>
@@ -86,7 +86,7 @@ export default function ReviewSessionItem({
           {/* Files List */}
           {session.files.length > 0 && (
             <div className="mt-3">
-              <div className="text-xs font-semibold mb-2 tracking-wide">
+              <div className="text-xs font-semibold mb-2 tracking-wide text-text-primary">
                 Files ({session.files.length})
               </div>
               

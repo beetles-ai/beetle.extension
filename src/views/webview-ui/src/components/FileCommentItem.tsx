@@ -74,11 +74,11 @@ export default function FileCommentItem({
         onClick={onToggle}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-xs ">
+          <span className="text-xs text-text-primary">
             {file.expanded ? <ChevronDown className='h-3 w-3' /> : <ChevronRight className='h-3 w-3' />}
           </span>
-          <span className="text-xs"><File className='h-3 w-3'/></span>
-          <span className="text-xs truncate" title={file.filePath}>{fileName}</span>
+          <span className="text-xs text-text-secondary"><File className='h-3 w-3'/></span>
+          <span className="text-xs text-text-primary truncate" title={file.filePath}>{fileName}</span>
         </div>
         {badge.element && (
           <div className="ml-2 flex-shrink-0">{badge.element}</div>
@@ -89,7 +89,7 @@ export default function FileCommentItem({
       {file.expanded && (
         <div className="ml-6 pl-3">
           {file.comments.length === 0 ? (
-            <div className="text-xs opacity-50 py-2 italic">
+            <div className="text-xs text-text-secondary py-2 italic">
               {isActiveReview ? 'Analyzing... no comments yet' : 'No comments'}
             </div>
           ) : (
