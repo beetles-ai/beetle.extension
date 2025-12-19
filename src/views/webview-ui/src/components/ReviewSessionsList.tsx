@@ -30,13 +30,13 @@ export default function ReviewSessionsList({
       {/* Current Review Section */}
       {currentSession && (
         <>
-          <div className="text-xs font-semibold mb-3 tracking-wider flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <ScanSearch className='h-3 w-3 inline-block text-text-primary' /> <span className="text-text-primary">REVIEW</span>
+          <div className="text-xs font-semibold mb-3 text-text-primary tracking-wider flex items-center justify-between">
+            <div className="flex items-center gap-1 ">
+              <ScanSearch className='h-3 w-3 inline-block ' /> <span>REVIEW</span>
             </div>
             <button
               onClick={onClearSession}
-              className="p-1 text-text-primary hover:bg-vscode-list-hover rounded transition-colors"
+              className="p-1 hover:bg-vscode-list-hover rounded transition-colors"
               title="Clear session"
             >
               <Trash2 className="h-3 w-3" />

@@ -14,8 +14,8 @@ import { generateSessionName, resetSessionCounter } from '../utils/sessionNames'
 
 const exec = util.promisify(cp.exec);
 
-// File extensions to exclude from review analysis
-const EXCLUDED_EXTENSIONS = [
+// File extensions to exclude from review analysis (using Set for O(1) lookup)
+const EXCLUDED_EXTENSIONS = new Set([
   // Images
   '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.bmp', '.tiff', '.tif',
   // Videos
@@ -32,7 +32,7 @@ const EXCLUDED_EXTENSIONS = [
   '.sqlite', '.db', '.lock', '.bin', '.exe', '.dll', '.so', '.dylib',
   // Design files
   '.psd', '.ai', '.sketch', '.fig', '.xd'
-];
+]);
 
 export class BeetleViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -1898,7 +1898,7 @@ export class BeetleViewProvider implements vscode.WebviewViewProvider {
    */
   private shouldExcludeFile(filePath: string): boolean {
     const ext = path.extname(filePath).toLowerCase();
-    return EXCLUDED_EXTENSIONS.includes(ext);
+    return EXCLUDED_EXTENSIONS.has(ext);
   }
 
   /**
