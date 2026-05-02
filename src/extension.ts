@@ -3,6 +3,8 @@ import { AuthenticationProvider } from './authentication/AuthenticationProvider'
 import { ApiClient } from './services/ApiClient';
 import { BeetleService } from './services/BeetleService';
 import { BeetleViewProvider } from './views/BeetleViewProvider';
+import { LensCodeLensProvider } from './lens/LensCodeLensProvider';
+import { init as initLensPanel, showRouteDetail, showFunctionDetail } from './lens/LensDetailPanel';
 import { Logger } from './utils/logger';
 import { VIEW_ID_MAIN, BEETLE_URI_AUTHORITY, BEETLE_AUTH_CALLBACK_PATH } from './utils/constants';
 
@@ -73,6 +75,40 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			})
 		);
+
+		// Pass extension path to the detail panel so it can load the beetle logo
+		initLensPanel(context.extensionPath);
+
+		// Register CodeLens provider for Beetle Lens metrics
+		const lensProvider = new LensCodeLensProvider();
+		context.subscriptions.push(
+			vscode.languages.registerCodeLensProvider(
+				[
+					{ language: 'typescript' },
+					{ language: 'javascript' },
+					{ language: 'typescriptreact' },
+					{ language: 'javascriptreact' },
+				],
+				lensProvider
+			)
+		);
+
+		// Commands to show metric detail panels
+		context.subscriptions.push(
+			vscode.commands.registerCommand('beetle.lens.showRouteDetail', (route) => {
+				showRouteDetail(route);
+			})
+		);
+
+		context.subscriptions.push(
+			vscode.commands.registerCommand('beetle.lens.showFunctionDetail', (entry, filePath) => {
+				showFunctionDetail(entry, filePath);
+			})
+		);
+
+		// Auto-refresh CodeLens every 30s
+		const lensRefreshTimer = setInterval(() => lensProvider.refresh(), 30_000);
+		context.subscriptions.push({ dispose: () => clearInterval(lensRefreshTimer) });
 
 		// Register disposal for logger
 		context.subscriptions.push({

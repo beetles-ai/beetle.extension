@@ -54,6 +54,14 @@
                 "command": "beetle.fixWithAI",
                 "title": "Fix with AI",
                 "icon": "$(sparkle)"
+            },
+            {
+                "command": "beetle.lens.showRouteDetail",
+                "title": "Beetle Lens: Show Route Detail"
+            },
+            {
+                "command": "beetle.lens.showFunctionDetail",
+                "title": "Beetle Lens: Show Function Detail"
             }
         ],
         "menus": {
@@ -69,6 +77,32 @@
                     "when": "commentController == beetle-review"
                 }
             ]
+        },
+        "configuration": {
+            "title": "Beetle Lens",
+            "properties": {
+                "beetle.lens.serverUrl": {
+                    "type": "string",
+                    "default": "http://localhost:3001",
+                    "description": "URL of the beetle-lens-server metrics API"
+                },
+                "beetle.lens.apiKey": {
+                    "type": "string",
+                    "default": "",
+                    "description": "API key for authenticating with the beetle-lens-server"
+                },
+                "beetle.lens.serviceName": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Service name to query metrics for (must match the serviceName used when initialising beetle-lens-node)"
+                },
+                "beetle.lens.environment": {
+                    "type": "string",
+                    "default": "development",
+                    "enum": ["development", "staging", "production"],
+                    "description": "Environment to query metrics for"
+                }
+            }
         }
     },
     "scripts": {
