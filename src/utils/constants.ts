@@ -18,3 +18,7 @@ export const VIEW_CONTAINER_ID = 'beetle-sidebar';
 // Extension info
 export const EXTENSION_NAME = 'Beetle';
 export const EXTENSION_DISPLAY_NAME = 'Beetle AI';
+
+// ── Beetle Lens (profiler) ────────────────────────────────────────────────────
+export const LENS_API_BASE_URL_DEFAULT = 'http://localhost:3001';
+export const LENS_API_KEY_DEFAULT      = 'blt_usr_jdksfhjkasdhfjkhsseirdlks';
